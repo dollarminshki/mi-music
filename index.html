@@ -1,1203 +1,1151 @@
+
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-[#050508] text-slate-100 select-none">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MI MUSIC - DD Edition</title>
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Fonts: Plus Jakarta Sans for crisp modern DD Music typography -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <!-- jsmediatags for local MP3 ID3 extraction -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DD MUSIC | MI Player Pro</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{font-family:'Plus Jakarta Sans',sans-serif}
+body{background:#050508;color:#e2e8f0}
+.dd-glass{background:rgba(18,18,28,.78);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.07)}
+.dd-card{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);transition:.2s}
+.dd-card:hover{background:rgba(255,255,255,.08);border-color:rgba(255,0,85,.35);transform:translateY(-2px)}
+.dd-gradient{background:linear-gradient(135deg,#ff0055,#9333ea)}
+.gradient-text{background:linear-gradient(135deg,#ff0055,#a855f7,#06b6d4);background-clip:text;color:transparent}
+.nav-active{background:linear-gradient(90deg,rgba(255,0,85,.2),transparent);border-left:3px solid #ff0055;color:white}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-thumb{background:#ff005566;border-radius:20px}
+input[type=range]{accent-color:#ff0055}
+.eq-slider{height:145px;writing-mode:vertical-lr;direction:rtl}
+@keyframes spin{to{transform:rotate(360deg)}}
+.vinyl-spin{animation:spin 15s linear infinite}
+.paused{animation-play-state:paused}
+.tonearm{transform-origin:20px 20px;transition:.5s}
+.tonearm.playing{transform:rotate(25deg)}
+.view{display:none}
+.view.active{display:block}
+</style>
+</head>
 
-  <script>
-    /* =========================================================
-   DD MUSIC - FIXED AUDIO ENGINE
-   Online audio bypasses Web Audio to avoid CORS silence.
-   Local audio uses the 5-band equalizer.
-========================================================= */
+<body class="h-screen overflow-hidden">
 
-const state = {
-  currentTrack: null,
-  isPlaying: false,
-  queue: [],
-  queueIndex: -1,
-  favorites: new Set(JSON.parse(localStorage.getItem('dd_favorites') || '[]')),
-  recentPlayed: JSON.parse(localStorage.getItem('dd_recent') || '[]'),
-  playlists: JSON.parse(localStorage.getItem('dd_playlists') || '[]'),
-  activeView: 'home',
-  audioCtx: null,
-  audioSourceNode: null,
-  eqFilters: [],
-  analyser: null,
-  lyricsData: [],
-  sleepTimerTimeout: null
-};
+<div class="flex h-full">
+
+<!-- SIDEBAR -->
+<aside id="sidebar" class="hidden md:flex w-64 shrink-0 flex-col dd-glass z-30">
+  <div class="p-6 flex items-center gap-3 cursor-pointer" onclick="switchView('home')">
+    <div class="w-11 h-11 rounded-2xl dd-gradient flex items-center justify-center text-white text-xl">♫</div>
+    <div>
+      <h1 class="text-xl font-black tracking-wider">DD MUSIC</h1>
+      <p class="text-[10px] text-slate-400 uppercase tracking-widest">MI Player Pro</p>
+    </div>
+  </div>
+
+  <nav class="flex-1 px-3 space-y-2 overflow-y-auto">
+    <p class="px-4 pt-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Discover</p>
+    <button id="nav-home" onclick="switchView('home')" class="nav-active w-full text-left px-4 py-3 rounded-xl text-xs font-bold">⌂ &nbsp; Home Hub</button>
+    <button id="nav-search" onclick="switchView('search')" class="w-full text-left px-4 py-3 rounded-xl text-xs font-bold text-slate-400">⌕ &nbsp; Online Search <span class="text-pink-400 ml-2">LIVE</span></button>
+
+    <p class="px-4 pt-5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">My Audio</p>
+    <button id="nav-library" onclick="switchView('library')" class="w-full text-left px-4 py-3 rounded-xl text-xs font-bold text-slate-400">▤ &nbsp; Local Library <span id="library-count" class="float-right">0</span></button>
+    <button id="nav-playlists" onclick="switchView('playlists')" class="w-full text-left px-4 py-3 rounded-xl text-xs font-bold text-slate-400">♫ &nbsp; Playlists</button>
+
+    <p class="px-4 pt-5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Studio</p>
+    <button id="nav-equalizer" onclick="switchView('equalizer')" class="w-full text-left px-4 py-3 rounded-xl text-xs font-bold text-slate-400">≋ &nbsp; 5-Band Equalizer</button>
+    <button id="nav-ringtone" onclick="switchView('ringtone')" class="w-full text-left px-4 py-3 rounded-xl text-xs font-bold text-slate-400">✂ &nbsp; Ringtone Cutter</button>
+    <button id="nav-settings" onclick="switchView('settings')" class="w-full text-left px-4 py-3 rounded-xl text-xs font-bold text-slate-400">⚙ &nbsp; Preferences</button>
+  </nav>
+
+  <div class="p-4">
+    <label for="file-input" class="block text-center cursor-pointer dd-gradient rounded-xl p-3 text-xs font-bold text-white">＋ Import Local Songs</label>
+    <input id="file-input" type="file" accept="audio/*" multiple class="hidden">
+    <p class="text-[10px] text-center text-slate-500 mt-2">Your music stays in your browser</p>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="flex-1 min-w-0 flex flex-col relative">
+
+<header class="h-16 shrink-0 border-b border-white/5 flex items-center justify-between px-4 md:px-7 bg-black/30">
+  <div class="flex items-center gap-3">
+    <button onclick="toggleMobileNav()" class="md:hidden text-xl">☰</button>
+    <input id="top-search" placeholder="Search songs or artists..." class="w-40 sm:w-72 bg-slate-900 border border-white/10 rounded-full px-4 py-2 text-xs outline-none focus:border-pink-500" onkeydown="if(event.key==='Enter'){switchView('search');searchMusic(this.value)}">
+  </div>
+  <button onclick="openSleepTimer()" class="dd-card rounded-full px-4 py-2 text-xs">◷ <span id="timer-label">Sleep Timer</span></button>
+</header>
+
+<div id="content" class="flex-1 overflow-y-auto p-4 md:p-8 pb-32">
+
+<!-- HOME -->
+<section id="view-home" class="view active space-y-8">
+  <div class="rounded-3xl border border-pink-500/20 bg-gradient-to-r from-pink-950/50 via-purple-950/30 to-slate-950 p-6 md:p-10 flex flex-col md:flex-row items-center justify-between gap-8">
+    <div class="max-w-xl text-center md:text-left">
+      <span class="text-[10px] tracking-widest text-pink-400 font-black">DD MUSIC EDITION</span>
+      <h2 class="text-4xl md:text-5xl font-black mt-3">Immersive<br><span class="gradient-text">Audiophile Sound</span></h2>
+      <p class="text-sm text-slate-400 mt-4">Discover online music, enjoy your local collection, and shape your sound with the DD audio studio.</p>
+      <div class="flex flex-wrap justify-center md:justify-start gap-3 mt-6">
+        <button onclick="switchView('search')" class="dd-gradient rounded-full px-6 py-3 text-xs font-bold">Explore Online Music</button>
+        <button onclick="document.getElementById('file-input').click()" class="dd-card rounded-full px-6 py-3 text-xs font-bold">Import Music</button>
+      </div>
+    </div>
+    <div class="relative p-5">
+      <div id="vinyl" class="vinyl-spin paused w-48 h-48 md:w-56 md:h-56 rounded-full border-8 border-slate-800 bg-black flex items-center justify-center shadow-2xl">
+        <div class="w-36 h-36 rounded-full border border-slate-700 flex items-center justify-center">
+          <div class="w-24 h-24 rounded-full border border-slate-700 flex items-center justify-center">
+            <div class="w-16 h-16 rounded-full dd-gradient flex items-center justify-center font-black">DD</div>
+          </div>
+        </div>
+      </div>
+      <div id="tonearm" class="tonearm absolute top-0 right-0 w-10 h-28 text-pink-500 text-4xl">╱</div>
+    </div>
+  </div>
+
+  <section>
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="font-black text-lg">Trending Online Music</h3>
+      <button onclick="switchView('search')" class="text-xs text-pink-400">Explore all →</button>
+    </div>
+    <div id="featured" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+      <p class="text-xs text-slate-500">Loading music...</p>
+    </div>
+  </section>
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="dd-glass rounded-3xl p-5">
+      <h3 class="font-bold mb-4">Recently Played</h3>
+      <div id="recent-list" class="space-y-2 text-xs text-slate-500">Nothing played yet.</div>
+    </div>
+    <div class="dd-glass rounded-3xl p-5">
+      <h3 class="font-bold mb-4">Your Favorites</h3>
+      <div id="favorite-list" class="space-y-2 text-xs text-slate-500">No favorites yet.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ONLINE SEARCH -->
+<section id="view-search" class="view space-y-6">
+  <div class="dd-glass rounded-3xl p-6">
+    <h2 class="text-2xl font-black">Online Song Discovery</h2>
+    <p class="text-xs text-slate-400 mt-2">Search the iTunes music catalogue and play available audio previews.</p>
+    <form id="search-form" class="flex gap-2 mt-5">
+      <input id="search-input" placeholder="Song, artist or album..." class="flex-1 min-w-0 bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-pink-500">
+      <button class="dd-gradient rounded-xl px-6 text-xs font-bold">Search</button>
+    </form>
+    <div class="flex flex-wrap gap-3 mt-4 text-xs text-slate-400">
+      <button onclick="searchMusic('Drake')">Drake</button>
+      <button onclick="searchMusic('Taylor Swift')">Taylor Swift</button>
+      <button onclick="searchMusic('The Weeknd')">The Weeknd</button>
+      <button onclick="searchMusic('Afrobeats')">Afrobeats</button>
+    </div>
+  </div>
+  <p id="search-status" class="text-xs text-slate-400"></p>
+  <div id="search-results" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"></div>
+</section>
+
+<!-- LIBRARY -->
+<section id="view-library" class="view space-y-5">
+  <div class="flex flex-wrap justify-between items-center gap-3">
+    <div><h2 class="text-2xl font-black">My Library</h2><p class="text-xs text-slate-400 mt-1">Your imported music collection</p></div>
+    <button onclick="document.getElementById('file-input').click()" class="dd-gradient rounded-xl px-4 py-3 text-xs font-bold">＋ Add Songs</button>
+  </div>
+  <input id="library-filter" placeholder="Filter your library..." oninput="renderLibrary()" class="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs outline-none">
+  <div id="library-list" class="dd-glass rounded-2xl p-3 space-y-1"></div>
+</section>
+
+<!-- PLAYLISTS -->
+<section id="view-playlists" class="view space-y-5">
+  <div class="flex justify-between items-center">
+    <div><h2 class="text-2xl font-black">Your Playlists</h2><p class="text-xs text-slate-400 mt-1">Create your own music collections</p></div>
+    <button onclick="createPlaylist()" class="dd-gradient rounded-xl px-4 py-3 text-xs font-bold">＋ New Playlist</button>
+  </div>
+  <div id="playlist-grid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+</section>
+
+<!-- EQUALIZER -->
+<section id="view-equalizer" class="view space-y-5">
+  <div class="dd-glass rounded-3xl p-6">
+    <h2 class="text-2xl font-black">DD Master Equalizer</h2>
+    <p class="text-xs text-slate-400 mt-2">Five-band audio processing for local music.</p>
+    <div class="flex flex-wrap gap-2 mt-5">
+      <button onclick="applyPreset('normal')" class="dd-card rounded-xl px-4 py-2 text-xs">Normal</button>
+      <button onclick="applyPreset('rock')" class="dd-card rounded-xl px-4 py-2 text-xs">Rock</button>
+      <button onclick="applyPreset('pop')" class="dd-card rounded-xl px-4 py-2 text-xs">Pop</button>
+      <button onclick="applyPreset('jazz')" class="dd-card rounded-xl px-4 py-2 text-xs">Jazz</button>
+      <button onclick="applyPreset('bass')" class="dd-card rounded-xl px-4 py-2 text-xs">Bass Boost</button>
+    </div>
+    <div class="grid grid-cols-5 gap-3 sm:gap-8 mt-10 text-center">
+      <div><div id="eq-label-0" class="text-pink-400 text-xs mb-3">0 dB</div><input class="eq-slider" type="range" min="-12" max="12" value="0" oninput="setEQ(0,this.value)"><p class="text-xs mt-3">60 Hz</p></div>
+      <div><div id="eq-label-1" class="text-pink-400 text-xs mb-3">0 dB</div><input class="eq-slider" type="range" min="-12" max="12" value="0" oninput="setEQ(1,this.value)"><p class="text-xs mt-3">230 Hz</p></div>
+      <div><div id="eq-label-2" class="text-pink-400 text-xs mb-3">0 dB</div><input class="eq-slider" type="range" min="-12" max="12" value="0" oninput="setEQ(2,this.value)"><p class="text-xs mt-3">910 Hz</p></div>
+      <div><div id="eq-label-3" class="text-pink-400 text-xs mb-3">0 dB</div><input class="eq-slider" type="range" min="-12" max="12" value="0" oninput="setEQ(3,this.value)"><p class="text-xs mt-3">4 kHz</p></div>
+      <div><div id="eq-label-4" class="text-pink-400 text-xs mb-3">0 dB</div><input class="eq-slider" type="range" min="-12" max="12" value="0" oninput="setEQ(4,this.value)"><p class="text-xs mt-3">14 kHz</p></div>
+    </div>
+    <div class="mt-10">
+      <p class="text-xs font-bold text-slate-400 mb-3">LIVE AUDIO SPECTRUM</p>
+      <canvas id="visualizer" class="w-full h-28 bg-slate-950 rounded-2xl"></canvas>
+      <p class="text-[10px] text-slate-500 mt-2">The equalizer processes local tracks. Online previews bypass the EQ to avoid cross-origin audio restrictions.</p>
+    </div>
+  </div>
+</section>
+
+<!-- RINGTONE CUTTER -->
+<section id="view-ringtone" class="view space-y-5">
+  <div class="dd-glass rounded-3xl p-6">
+    <h2 class="text-2xl font-black">Ringtone Cutter</h2>
+    <p class="text-xs text-slate-400 mt-2">Choose an imported local track and export a trimmed WAV ringtone.</p>
+    <select id="ringtone-select" class="w-full mt-6 bg-slate-900 border border-white/10 rounded-xl p-3 text-xs">
+      <option value="">Choose a local track</option>
+    </select>
+    <div id="trim-controls" class="hidden mt-6 space-y-5">
+      <div class="flex justify-between text-xs"><span>Start: <b id="start-label" class="text-pink-400">0s</b></span><span>End: <b id="end-label" class="text-pink-400">30s</b></span></div>
+      <input id="trim-start" type="range" min="0" max="30" value="0" class="w-full">
+      <input id="trim-end" type="range" min="1" max="30" value="30" class="w-full">
+      <button onclick="exportRingtone()" class="dd-gradient rounded-xl px-6 py-3 text-xs font-bold">Export WAV Ringtone</button>
+    </div>
+    <p id="ringtone-message" class="text-xs text-slate-400 mt-4"></p>
+  </div>
+</section>
+
+<!-- SETTINGS -->
+<section id="view-settings" class="view space-y-5">
+  <div class="dd-glass rounded-3xl p-6">
+    <h2 class="text-2xl font-black">DD Music Preferences</h2>
+    <p class="text-xs text-slate-400 mt-2">Manage your music data.</p>
+    <button onclick="clearMusicData()" class="mt-6 bg-red-500/15 border border-red-500/30 text-red-300 rounded-xl px-5 py-3 text-xs font-bold">Clear Local Music Database</button>
+    <p class="text-[10px] text-slate-500 mt-3">This permanently deletes imported tracks and saved playlists from this browser.</p>
+  </div>
+</section>
+
+</div>
+
+<!-- MINI PLAYER -->
+<div class="absolute bottom-0 left-0 right-0 h-20 dd-glass border-t border-white/10 z-40 flex items-center justify-between px-3 md:px-6 gap-2">
+  <div class="absolute top-0 left-0 right-0 h-1 bg-slate-800 cursor-pointer" id="progress-bar">
+    <div id="progress-fill" class="h-full dd-gradient" style="width:0%"></div>
+  </div>
+  <div class="flex items-center gap-3 min-w-0 w-1/3">
+    <img id="mini-cover" src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=150" class="w-11 h-11 rounded-xl object-cover">
+    <div class="min-w-0">
+      <p id="mini-title" class="text-xs font-bold truncate">No Track Playing</p>
+      <p id="mini-artist" class="text-[10px] text-slate-400 truncate">DD Music Engine</p>
+    </div>
+  </div>
+  <div class="flex items-center gap-3">
+    <button onclick="playPrevious()" class="text-lg">⏮</button>
+    <button id="play-button" onclick="togglePlay()" class="dd-gradient w-11 h-11 rounded-full text-white text-lg">▶</button>
+    <button onclick="playNext()" class="text-lg">⏭</button>
+  </div>
+  <div class="flex items-center justify-end gap-3 w-1/3">
+    <span id="time-display" class="hidden md:block text-[10px] text-slate-400">0:00 / 0:00</span>
+    <input id="volume" type="range" min="0" max="1" step=".01" value=".8" class="hidden sm:block w-16">
+    <button onclick="openFullPlayer()" class="text-lg">⛶</button>
+  </div>
+</div>
+
+</main>
+</div>
+
+<!-- FULL PLAYER -->
+<div id="full-player" class="hidden fixed inset-0 z-50 bg-[#050508]/95 backdrop-blur-xl flex-col items-center justify-center p-6">
+  <button onclick="closeFullPlayer()" class="absolute top-6 left-6 text-2xl">⌄</button>
+  <button onclick="toggleFavorite()" class="absolute top-6 right-6 text-2xl text-pink-400">★</button>
+  <img id="full-cover" src="" class="w-64 h-64 rounded-3xl object-cover shadow-2xl">
+  <h2 id="full-title" class="text-xl font-black mt-7 text-center">No Track Playing</h2>
+  <p id="full-artist" class="text-sm text-slate-400 mt-2"></p>
+  <input id="full-seek" type="range" min="0" max="100" value="0" class="w-full max-w-xl mt-10">
+  <div class="flex justify-between w-full max-w-xl text-xs text-slate-400 mt-2"><span id="full-current">0:00</span><span id="full-duration">0:00</span></div>
+  <div class="flex items-center gap-10 mt-8">
+    <button onclick="playPrevious()" class="text-3xl">⏮</button>
+    <button id="full-play-button" onclick="togglePlay()" class="dd-gradient rounded-full w-16 h-16 text-2xl">▶</button>
+    <button onclick="playNext()" class="text-3xl">⏭</button>
+  </div>
+  <div class="w-full max-w-xl mt-8">
+    <h3 class="text-xs font-bold text-slate-400 mb-3">LYRICS</h3>
+    <div id="lyrics" class="text-xs text-slate-300 whitespace-pre-line text-center max-h-36 overflow-y-auto">Lyrics will appear here when available.</div>
+  </div>
+</div>
+
+<!-- SLEEP TIMER -->
+<div id="sleep-modal" class="hidden fixed inset-0 z-[60] bg-black/80 items-center justify-center p-4">
+  <div class="dd-glass rounded-3xl p-6 w-full max-w-sm">
+    <h3 class="font-bold text-lg">Sleep Timer</h3>
+    <p class="text-xs text-slate-400 mt-2">Pause playback after:</p>
+    <div class="grid grid-cols-2 gap-3 mt-5">
+      <button onclick="setSleepTimer(15)" class="dd-card rounded-xl p-3 text-xs">15 minutes</button>
+      <button onclick="setSleepTimer(30)" class="dd-card rounded-xl p-3 text-xs">30 minutes</button>
+      <button onclick="setSleepTimer(60)" class="dd-card rounded-xl p-3 text-xs">60 minutes</button>
+      <button onclick="cancelSleepTimer()" class="bg-red-500/20 rounded-xl p-3 text-xs text-red-300">Cancel Timer</button>
+    </div>
+    <button onclick="closeSleepTimer()" class="w-full mt-4 text-xs text-slate-400">Close</button>
+  </div>
+</div>
+
+<script>
+/* ==========================================
+   DD MUSIC ENGINE
+   Online and local audio use separate players.
+   Only local audio is connected to Web Audio EQ.
+========================================== */
 
 const audio = new Audio();
 const onlineAudio = new Audio();
 let activeAudio = audio;
-let db;
-let localTracks = [];
-let ringtoneObjectURL = null;
 
-audio.preload = 'auto';
-onlineAudio.preload = 'auto';
+audio.preload = "auto";
+onlineAudio.preload = "auto";
 audio.volume = 0.8;
 onlineAudio.volume = 0.8;
 
-window.addEventListener('DOMContentLoaded', () => {
-  initIndexedDB();
-  initWebAudioEngine();
-  fetchHomeFeaturedMusic();
-  renderHomeViews();
-  renderFavorites();
-  renderPlaylistsGrid();
+let db = null;
+let localTracks = [];
+let currentTrack = null;
+let queue = [];
+let queueIndex = -1;
+let isPlaying = false;
+let currentObjectURL = null;
+let sleepTimeout = null;
+let audioContext = null;
+let sourceNode = null;
+let analyser = null;
+let eqFilters = [];
+let playlists = JSON.parse(localStorage.getItem("dd_playlists") || "[]");
+let favorites = new Set(JSON.parse(localStorage.getItem("dd_favorites") || "[]"));
+let recentTracks = JSON.parse(localStorage.getItem("dd_recent") || "[]");
 
-  [audio, onlineAudio].forEach(player => {
-    player.addEventListener('timeupdate', handleAudioTimeUpdate);
-    player.addEventListener('ended', handleAudioEnded);
-    player.addEventListener('error', () => {
-      if (player === activeAudio) {
-        state.isPlaying = false;
+const frequencies = [60,230,910,4000,14000];
+
+window.addEventListener("DOMContentLoaded", () => {
+  initDatabase();
+  initAudioEngine();
+
+  [audio,onlineAudio].forEach(player => {
+    player.addEventListener("timeupdate",handleTimeUpdate);
+    player.addEventListener("loadedmetadata",handleMetadata);
+    player.addEventListener("ended",handleEnded);
+    player.addEventListener("play",() => {
+      if(player === activeAudio) {
+        isPlaying = true;
+        updatePlayerUI();
+      }
+    });
+    player.addEventListener("pause",() => {
+      if(player === activeAudio) {
+        isPlaying = false;
         updatePlayerUI();
       }
     });
   });
+
+  document.getElementById("file-input").addEventListener("change",importFiles);
+  document.getElementById("search-form").addEventListener("submit",e => {
+    e.preventDefault();
+    searchMusic(document.getElementById("search-input").value);
+  });
+  document.getElementById("volume").addEventListener("input",e => setVolume(e.target.value));
+  document.getElementById("progress-bar").addEventListener("click",seekFromBar);
+  document.getElementById("full-seek").addEventListener("input",e => seekFromSlider(e.target.value));
+  document.getElementById("ringtone-select").addEventListener("change",loadRingtoneTrack);
+  document.getElementById("trim-start").addEventListener("input",updateTrimLabels);
+  document.getElementById("trim-end").addEventListener("input",updateTrimLabels);
+
+  loadFeatured();
+  renderHome();
+  renderPlaylists();
 });
 
-/* ---------------- DATABASE ---------------- */
+function initDatabase() {
+  const request = indexedDB.open("DDMusicDB",1);
 
-function initIndexedDB() {
-  const req = indexedDB.open('DDMusicDB', 1);
-
-  req.onupgradeneeded = e => {
-    const database = e.target.result;
-    if (!database.objectStoreNames.contains('tracks')) {
-      database.createObjectStore('tracks', { keyPath: 'id' });
+  request.onupgradeneeded = event => {
+    const database = event.target.result;
+    if(!database.objectStoreNames.contains("tracks")) {
+      database.createObjectStore("tracks",{keyPath:"id"});
     }
   };
 
-  req.onsuccess = e => {
-    db = e.target.result;
-    loadLocalTracksFromDB();
+  request.onsuccess = event => {
+    db = event.target.result;
+    loadLocalTracks();
   };
 
-  req.onerror = () => console.error('Could not open music database.');
+  request.onerror = () => console.error("Could not open music database.");
 }
 
-function saveTrackToDB(track) {
-  if (!db) {
-    alert('Music database is still loading. Please try again.');
+function loadLocalTracks() {
+  if(!db) return;
+  const transaction = db.transaction("tracks","readonly");
+  const request = transaction.objectStore("tracks").getAll();
+
+  request.onsuccess = () => {
+    localTracks = request.result || [];
+    document.getElementById("library-count").textContent = localTracks.length;
+    renderLibrary();
+    populateRingtoneSelect();
+  };
+}
+
+function importFiles(event) {
+  const files = Array.from(event.target.files || []);
+  if(!files.length) return;
+
+  if(!db) {
+    alert("The music database is still opening. Please try again.");
     return;
   }
 
-  const tx = db.transaction('tracks', 'readwrite');
-  tx.objectStore('tracks').put(track);
-  tx.oncomplete = loadLocalTracksFromDB;
+  const transaction = db.transaction("tracks","readwrite");
+  const store = transaction.objectStore("tracks");
+
+  files.forEach(file => {
+    const track = {
+      id:"local_" + Date.now() + "_" + Math.random().toString(36).slice(2),
+      title:file.name.replace(/\.[^/.]+$/,""),
+      artist:"Local Track",
+      album:"My Imports",
+      cover:"https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400",
+      fileBlob:file,
+      isOnline:false
+    };
+    store.put(track);
+  });
+
+  transaction.oncomplete = () => {
+    loadLocalTracks();
+    event.target.value = "";
+  };
+
+  transaction.onerror = () => alert("There was a problem saving your music.");
 }
 
-function loadLocalTracksFromDB() {
-  if (!db) return;
+/* ONLINE MUSIC SEARCH */
 
-  const tx = db.transaction('tracks', 'readonly');
-  const req = tx.objectStore('tracks').getAll();
-
-  req.onsuccess = () => {
-    localTracks = req.result || [];
-
-    const count = document.getElementById('nav-lib-count');
-    if (count) count.innerText = localTracks.length;
-
-    if (state.activeView === 'library') renderLibrary();
-    if (state.activeView === 'ringtone') populateRingtoneTrackSelect();
+function formatOnlineTrack(item) {
+  return {
+    id:"itunes_" + item.trackId,
+    title:item.trackName || "Unknown Track",
+    artist:item.artistName || "Unknown Artist",
+    album:item.collectionName || "Single",
+    cover:item.artworkUrl100 ? item.artworkUrl100.replace("100x100bb","500x500bb") : "",
+    src:item.previewUrl,
+    isOnline:true
   };
 }
 
-function resolveTrack(track) {
-  if (!track) return null;
-
-  if (track.isOnline) return track;
-
-  const saved = localTracks.find(t => t.id === track.id);
-
-  if (saved && saved.fileBlob instanceof Blob) return saved;
-
-  if (track.fileBlob instanceof Blob) return track;
-
-  return saved || track;
-}
-
-/* ---------------- NAVIGATION ---------------- */
-
-function switchView(viewId) {
-  state.activeView = viewId;
-
-  document.querySelectorAll('.view-content').forEach(el => {
-    el.classList.add('hidden');
-  });
-
-  const active = document.getElementById(`view-${viewId}`);
-  if (active) active.classList.remove('hidden');
-
-  document.querySelectorAll('.nav-item').forEach(btn => {
-    btn.classList.remove('nav-item-active');
-  });
-
-  const navBtn = document.getElementById(`nav-${viewId}`);
-  if (navBtn) navBtn.classList.add('nav-item-active');
-
-  if (viewId === 'library') renderLibrary();
-  if (viewId === 'playlists') renderPlaylistsGrid();
-  if (viewId === 'ringtone') populateRingtoneTrackSelect();
-}
-
-function toggleMobileNav() {
-  const nav = document.getElementById('sidebar-nav');
-  nav.classList.toggle('hidden');
-  nav.classList.toggle('fixed');
-  nav.classList.toggle('inset-0');
-}
-
-/* ---------------- ONLINE MUSIC SEARCH ---------------- */
-
-async function fetchHomeFeaturedMusic() {
-  const grid = document.getElementById('home-featured-grid');
-
+async function loadFeatured() {
+  const box = document.getElementById("featured");
   try {
-    const res = await fetch(
-      'https://itunes.apple.com/search?term=top+charts&entity=song&limit=6'
-    );
-
-    if (!res.ok) throw new Error('Music search unavailable');
-
-    const data = await res.json();
-    grid.innerHTML = '';
-
-    data.results.forEach(item => {
-      if (item.previewUrl) {
-        grid.appendChild(createTrackCardHTML(formatiTunesTrack(item)));
-      }
+    const response = await fetch("https://itunes.apple.com/search?term=top+hits&entity=song&limit=6");
+    const data = await response.json();
+    box.innerHTML = "";
+    data.results.filter(item => item.previewUrl).forEach(item => {
+      box.appendChild(createTrackCard(formatOnlineTrack(item)));
     });
-
-    if (!grid.children.length) {
-      grid.innerHTML = '<p class="col-span-full text-center text-slate-500 text-xs">No featured tracks available.</p>';
-    }
-  } catch (error) {
-    grid.innerHTML = '<p class="col-span-full text-center text-slate-500 text-xs">Could not load featured tracks. Try online search.</p>';
+    if(!box.children.length) box.innerHTML = '<p class="text-xs text-slate-500">No previews available right now.</p>';
+  } catch(error) {
+    box.innerHTML = '<p class="text-xs text-slate-500">Could not load featured tracks. Try online search.</p>';
   }
 }
 
-function formatiTunesTrack(item) {
-  return {
-    id: 'itunes_' + item.trackId,
-    title: item.trackName || 'Unknown Title',
-    artist: item.artistName || 'Unknown Artist',
-    album: item.collectionName || 'Single',
-    cover: item.artworkUrl100
-      ? item.artworkUrl100.replace('100x100bb', '400x400bb')
-      : '',
-    src: item.previewUrl,
-    isOnline: true
-  };
+async function searchMusic(query) {
+  query = (query || "").trim();
+  if(!query) return;
+
+  switchView("search");
+  document.getElementById("search-input").value = query;
+  document.getElementById("search-status").textContent = "Searching online music...";
+  const resultsBox = document.getElementById("search-results");
+  resultsBox.innerHTML = "";
+
+  try {
+    const response = await fetch("https://itunes.apple.com/search?term=" + encodeURIComponent(query) + "&entity=song&limit=30");
+    if(!response.ok) throw new Error("Search request failed");
+
+    const data = await response.json();
+    const tracks = data.results.filter(item => item.previewUrl);
+
+    document.getElementById("search-status").textContent =
+      tracks.length ? tracks.length + " playable previews found." : "No playable previews found. Try another search.";
+
+    tracks.forEach(item => resultsBox.appendChild(createTrackCard(formatOnlineTrack(item))));
+  } catch(error) {
+    document.getElementById("search-status").textContent = "Online search failed. Check your internet connection and try again.";
+  }
 }
 
-function createTrackCardHTML(track) {
-  const card = document.createElement('div');
+function createTrackCard(track) {
+  const card = document.createElement("div");
+  card.className = "dd-card rounded-2xl p-3 cursor-pointer";
 
-  card.className =
-    'dd-glass-card rounded-2xl p-3 flex flex-col justify-between group relative cursor-pointer';
-
-  const image = document.createElement('img');
-  image.src = track.cover || '';
+  const image = document.createElement("img");
+  image.src = track.cover || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400";
+  image.className = "w-full aspect-square object-cover rounded-xl";
   image.alt = track.title;
-  image.className =
-    'w-full h-full object-cover group-hover:scale-105 transition duration-300';
 
-  const artwork = document.createElement('div');
-  artwork.className =
-    'relative w-full aspect-square rounded-xl overflow-hidden mb-2';
-
-  artwork.appendChild(image);
-
-  const title = document.createElement('h4');
-  title.className = 'text-xs font-bold text-slate-100 truncate';
+  const title = document.createElement("p");
+  title.className = "text-xs font-bold mt-3 truncate";
   title.textContent = track.title;
 
-  const artist = document.createElement('p');
-  artist.className = 'text-[10px] text-slate-400 truncate';
+  const artist = document.createElement("p");
+  artist.className = "text-[10px] text-slate-400 mt-1 truncate";
   artist.textContent = track.artist;
 
-  const details = document.createElement('div');
-  details.append(title, artist);
-
-  card.append(artwork, details);
-  card.addEventListener('click', () => {
-    state.queue = [track];
-    state.queueIndex = 0;
-    playSingleTrack(track);
+  const play = document.createElement("button");
+  play.className = "dd-gradient w-full rounded-xl py-2 mt-3 text-xs font-bold";
+  play.textContent = "▶ Play Preview";
+  play.addEventListener("click",() => {
+    queue = [track];
+    queueIndex = 0;
+    playTrack(track);
   });
 
+  card.append(image,title,artist,play);
   return card;
 }
 
-async function handleOnlineSearch(e) {
-  if (e) e.preventDefault();
+/* PLAYBACK ENGINE */
 
-  const input = document.getElementById('online-search-input');
-  handleOnlineSearchFromVal(input.value);
+function findLocalTrack(track) {
+  if(!track || !track.id) return track;
+  const saved = localTracks.find(item => item.id === track.id);
+  if(saved) return saved;
+  return track;
 }
 
-async function handleOnlineSearchFromVal(query) {
-  if (!query || !query.trim()) return;
+async function playTrack(track) {
+  if(!track) return;
 
-  const grid = document.getElementById('search-results-grid');
-  const loader = document.getElementById('search-loading');
-
-  grid.innerHTML = '';
-  loader.classList.remove('hidden');
-
-  try {
-    const url =
-      'https://itunes.apple.com/search?term=' +
-      encodeURIComponent(query) +
-      '&entity=song&limit=24';
-
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Search failed');
-
-    const data = await response.json();
-    loader.classList.add('hidden');
-
-    const tracks = data.results
-      .filter(item => item.previewUrl)
-      .map(formatiTunesTrack);
-
-    if (!tracks.length) {
-      grid.innerHTML =
-        '<div class="col-span-full text-center py-12 text-slate-500 text-xs">No playable preview tracks found.</div>';
+  // Recover the original Blob from IndexedDB.
+  // JSON/localStorage copies do not preserve a real Blob.
+  if(!track.isOnline) {
+    const savedTrack = findLocalTrack(track);
+    if(savedTrack && savedTrack.fileBlob instanceof Blob) {
+      track = savedTrack;
+    } else {
+      alert("This local music file could not be found. Please import it again.");
       return;
     }
-
-    state.queue = tracks;
-    state.queueIndex = -1;
-
-    tracks.forEach(track => {
-      grid.appendChild(createTrackCardHTML(track));
-    });
-
-  } catch (error) {
-    loader.classList.add('hidden');
-    grid.innerHTML =
-      '<div class="col-span-full text-center py-12 text-red-400 text-xs">Search failed. Check your internet connection and try again.</div>';
-  }
-}
-
-function quickSearch(term) {
-  document.getElementById('online-search-input').value = term;
-  handleOnlineSearchFromVal(term);
-}
-
-/* ---------------- LOCAL MUSIC ---------------- */
-
-function handleLocalFilesSelect(e) {
-  const files = Array.from(e.target.files || []);
-
-  if (!files.length) return;
-
-  files.forEach(file => {
-    if (!file.type.startsWith('audio/')) return;
-
-    const track = {
-      id: 'local_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-      title: file.name.replace(/\.[^/.]+$/, ''),
-      artist: 'Local Track',
-      album: 'Imports',
-      cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300',
-      fileBlob: file,
-      isOnline: false
-    };
-
-    if (window.jsmediatags) {
-      try {
-        window.jsmediatags.read(file, {
-          onSuccess: result => {
-            const tags = result.tags || {};
-            if (tags.title) track.title = tags.title;
-            if (tags.artist) track.artist = tags.artist;
-            if (tags.album) track.album = tags.album;
-            saveTrackToDB(track);
-          },
-          onError: () => saveTrackToDB(track)
-        });
-      } catch (error) {
-        saveTrackToDB(track);
-      }
-    } else {
-      saveTrackToDB(track);
-    }
-  });
-
-  e.target.value = '';
-}
-
-/* ---------------- PLAYBACK ENGINE ---------------- */
-
-function playSingleTrack(track) {
-  track = resolveTrack(track);
-  if (!track) return;
-
-  if (!track.isOnline && !(track.fileBlob instanceof Blob)) {
-    alert('This local song is unavailable. Please import it again.');
-    return;
-  }
-
-  if (!track.isOnline && !track.fileBlob) {
-    alert('The local audio file could not be found.');
-    return;
   }
 
   audio.pause();
   onlineAudio.pause();
 
-  state.currentTrack = track;
+  if(currentObjectURL) {
+    URL.revokeObjectURL(currentObjectURL);
+    currentObjectURL = null;
+  }
+
+  currentTrack = track;
   activeAudio = track.isOnline ? onlineAudio : audio;
 
   try {
-    if (track.isOnline) {
-      activeAudio.src = track.src;
+    if(track.isOnline) {
+      // Online previews bypass Web Audio to avoid cross-origin silence.
+      onlineAudio.src = track.src;
     } else {
-      activeAudio.src = URL.createObjectURL(track.fileBlob);
+      currentObjectURL = URL.createObjectURL(track.fileBlob);
+      audio.src = currentObjectURL;
+    }
+
+    if(audioContext && audioContext.state === "suspended") {
+      await audioContext.resume();
     }
 
     activeAudio.load();
+    updateTrackDetails();
 
-    if (state.audioCtx && state.audioCtx.state === 'suspended') {
-      state.audioCtx.resume();
-    }
+    await activeAudio.play();
 
-    activeAudio.play().then(() => {
-      state.isPlaying = true;
-      updatePlayerUI();
-      addToRecentHistory(track);
-      fetchLyricsForCurrentTrack();
-    }).catch(error => {
-      console.error('Playback error:', error);
-      state.isPlaying = false;
-      updatePlayerUI();
-
-      alert(
-        'This track could not be played. Try another online preview or check that your local file is valid.'
-      );
-    });
-
-  } catch (error) {
-    console.error(error);
-    alert('Unable to load this audio file.');
+    isPlaying = true;
+    updatePlayerUI();
+    addRecent(track);
+    fetchLyrics(track);
+  } catch(error) {
+    console.error("Playback error:",error);
+    isPlaying = false;
+    updatePlayerUI();
+    alert("This track could not be played. Try another preview or re-import the local file.");
   }
 }
 
-function togglePlayPause() {
-  if (!state.currentTrack) return;
+async function togglePlay() {
+  if(!currentTrack) return;
 
-  if (state.isPlaying) {
+  if(audioContext && audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
+
+  if(isPlaying) {
     activeAudio.pause();
-    state.isPlaying = false;
+    isPlaying = false;
     updatePlayerUI();
   } else {
-    if (state.audioCtx && state.audioCtx.state === 'suspended') {
-      state.audioCtx.resume();
-    }
-
-    activeAudio.play().then(() => {
-      state.isPlaying = true;
+    try {
+      await activeAudio.play();
+      isPlaying = true;
       updatePlayerUI();
-    }).catch(error => {
-      console.error('Playback error:', error);
-    });
+    } catch(error) {
+      console.error("Could not resume playback:",error);
+    }
   }
+}
+
+function updateTrackDetails() {
+  if(!currentTrack) return;
+  const track = currentTrack;
+
+  document.getElementById("mini-title").textContent = track.title;
+  document.getElementById("mini-artist").textContent = track.artist;
+  document.getElementById("mini-cover").src = track.cover || "";
+  document.getElementById("full-title").textContent = track.title;
+  document.getElementById("full-artist").textContent = track.artist;
+  document.getElementById("full-cover").src = track.cover || "";
 }
 
 function updatePlayerUI() {
-  const track = state.currentTrack;
-  if (!track) return;
+  const buttonText = isPlaying ? "Ⅱ" : "▶";
+  document.getElementById("play-button").textContent = buttonText;
+  document.getElementById("full-play-button").textContent = buttonText;
 
-  document.getElementById('mini-title').innerText = track.title;
-  document.getElementById('mini-artist').innerText = track.artist;
-  document.getElementById('mini-cover').src = track.cover || '';
-  document.getElementById('full-cover').src = track.cover || '';
+  document.getElementById("vinyl").classList.toggle("paused",!isPlaying);
+  document.getElementById("tonearm").classList.toggle("playing",isPlaying);
 
-  const vinyl = document.getElementById('hero-vinyl-disc');
-  const tonearm = document.getElementById('hero-tonearm');
-
-  if (state.isPlaying) {
-    vinyl.classList.remove('paused-animation');
-    tonearm.classList.add('tonearm-playing');
-  } else {
-    vinyl.classList.add('paused-animation');
-    tonearm.classList.remove('tonearm-playing');
-  }
-
-  const playSVG =
-    '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
-
-  const pauseSVG =
-    '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
-
-  document.getElementById('mini-play-btn').innerHTML =
-    state.isPlaying ? pauseSVG : playSVG;
-
-  document.getElementById('full-play-btn').innerHTML =
-    state.isPlaying ? pauseSVG : playSVG;
-
-  updateFavoriteButtonUI();
+  if(currentTrack) updateTrackDetails();
 }
 
-/* ---------------- PROGRESS AND CONTROLS ---------------- */
+function handleTimeUpdate(event) {
+  const player = event.currentTarget;
+  if(player !== activeAudio) return;
+  if(!Number.isFinite(player.duration) || player.duration <= 0) return;
 
-function handleAudioTimeUpdate(event) {
-  if (event.currentTarget !== activeAudio) return;
+  const percentage = (player.currentTime / player.duration) * 100;
+  document.getElementById("progress-fill").style.width = percentage + "%";
+  document.getElementById("full-seek").value = percentage;
 
-  const duration = activeAudio.duration;
-  if (!duration || !isFinite(duration)) return;
+  const current = formatTime(player.currentTime);
+  const duration = formatTime(player.duration);
 
-  const pct = (activeAudio.currentTime / duration) * 100;
-
-  document.getElementById('mini-progress-fill').style.width = pct + '%';
-  document.getElementById('full-seek-slider').value = pct;
-
-  const current = formatTime(activeAudio.currentTime);
-  const total = formatTime(duration);
-
-  document.getElementById('mini-current-time').innerText = current;
-  document.getElementById('mini-duration').innerText = total;
-  document.getElementById('full-current-time').innerText = current;
-  document.getElementById('full-duration').innerText = total;
+  document.getElementById("time-display").textContent = current + " / " + duration;
+  document.getElementById("full-current").textContent = current;
+  document.getElementById("full-duration").textContent = duration;
 }
 
-function handleAudioEnded(event) {
-  if (event && event.currentTarget !== activeAudio) return;
+function handleMetadata(event) {
+  if(event.currentTarget !== activeAudio) return;
+  handleTimeUpdate(event);
+}
 
-  state.isPlaying = false;
+function handleEnded(event) {
+  if(event && event.currentTarget !== activeAudio) return;
+  isPlaying = false;
   updatePlayerUI();
-
-  if (state.queue.length && state.queueIndex >= 0) {
-    playNextTrack();
-  }
+  playNext();
 }
 
-function playNextTrack() {
-  if (!state.queue.length) return;
-
-  state.queueIndex =
-    (state.queueIndex + 1) % state.queue.length;
-
-  playSingleTrack(state.queue[state.queueIndex]);
+function playNext() {
+  if(!queue.length) return;
+  queueIndex = (queueIndex + 1) % queue.length;
+  playTrack(queue[queueIndex]);
 }
 
-function playPrevTrack() {
-  if (!state.queue.length) return;
-
-  state.queueIndex =
-    (state.queueIndex - 1 + state.queue.length) %
-    state.queue.length;
-
-  playSingleTrack(state.queue[state.queueIndex]);
+function playPrevious() {
+  if(!queue.length) return;
+  queueIndex = (queueIndex - 1 + queue.length) % queue.length;
+  playTrack(queue[queueIndex]);
 }
 
-function seekAudioFromBar(e) {
-  if (!activeAudio.duration) return;
-
-  const rect = e.currentTarget.getBoundingClientRect();
-  const pct = Math.max(
-    0,
-    Math.min(1, (e.clientX - rect.left) / rect.width)
-  );
-
-  activeAudio.currentTime = pct * activeAudio.duration;
+function seekFromBar(event) {
+  if(!activeAudio.duration) return;
+  const rect = event.currentTarget.getBoundingClientRect();
+  const fraction = Math.max(0,Math.min(1,(event.clientX - rect.left) / rect.width));
+  activeAudio.currentTime = fraction * activeAudio.duration;
 }
 
-function seekAudioFromSlider(value) {
-  if (!activeAudio.duration) return;
-
-  activeAudio.currentTime =
-    (Number(value) / 100) * activeAudio.duration;
+function seekFromSlider(value) {
+  if(!activeAudio.duration) return;
+  activeAudio.currentTime = (Number(value) / 100) * activeAudio.duration;
 }
 
 function setVolume(value) {
-  audio.volume = Number(value);
-  onlineAudio.volume = Number(value);
+  const volume = Math.max(0,Math.min(1,Number(value)));
+  audio.volume = volume;
+  onlineAudio.volume = volume;
 }
 
-/* ---------------- LIBRARY ---------------- */
+function formatTime(seconds) {
+  if(!Number.isFinite(seconds)) return "0:00";
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return minutes + ":" + String(secs).padStart(2,"0");
+}
 
-let activeLibraryTab = 'all';
+/* RECENT TRACKS AND FAVORITES */
 
-function filterLibraryTab(tab) {
-  activeLibraryTab = tab;
+function addRecent(track) {
+  const cleanTrack = {
+    id:track.id,
+    title:track.title,
+    artist:track.artist,
+    album:track.album,
+    cover:track.cover,
+    src:track.isOnline ? track.src : "",
+    isOnline:!!track.isOnline
+  };
 
-  document.querySelectorAll('.lib-tab').forEach(button => {
-    button.classList.remove('bg-pink-600', 'text-white');
-    button.classList.add('text-slate-400');
+  recentTracks = recentTracks.filter(item => item.id !== cleanTrack.id);
+  recentTracks.unshift(cleanTrack);
+  recentTracks = recentTracks.slice(0,20);
+  localStorage.setItem("dd_recent",JSON.stringify(recentTracks));
+  renderHome();
+}
+
+function toggleFavorite() {
+  if(!currentTrack) return;
+
+  if(favorites.has(currentTrack.id)) {
+    favorites.delete(currentTrack.id);
+  } else {
+    favorites.add(currentTrack.id);
+  }
+
+  localStorage.setItem("dd_favorites",JSON.stringify([...favorites]));
+  renderHome();
+}
+
+function renderHome() {
+  const recentBox = document.getElementById("recent-list");
+  const favoriteBox = document.getElementById("favorite-list");
+
+  recentBox.innerHTML = "";
+  favoriteBox.innerHTML = "";
+
+  if(!recentTracks.length) recentBox.textContent = "Nothing played yet.";
+
+  recentTracks.slice(0,6).forEach(track => {
+    const button = document.createElement("button");
+    button.className = "dd-card w-full rounded-xl p-3 flex items-center gap-3 text-left";
+    button.innerHTML = '<span class="text-pink-400">▶</span><span class="min-w-0"><b class="block truncate"></b><small class="text-slate-400"></small></span>';
+    button.querySelector("b").textContent = track.title;
+    button.querySelector("small").textContent = track.artist;
+    button.addEventListener("click",() => replaySavedTrack(track));
+    recentBox.appendChild(button);
   });
 
-  const selected = document.querySelector(`[data-tab="${tab}"]`);
+  const favoriteTracks = [...favorites].map(id =>
+    localTracks.find(track => track.id === id) ||
+    recentTracks.find(track => track.id === id)
+  ).filter(Boolean);
 
-  if (selected) {
-    selected.classList.add('bg-pink-600', 'text-white');
-    selected.classList.remove('text-slate-400');
-  }
+  if(!favoriteTracks.length) favoriteBox.textContent = "No favorites yet.";
 
-  renderLibrary();
+  favoriteTracks.forEach(track => {
+    const button = document.createElement("button");
+    button.className = "dd-card w-full rounded-xl p-3 text-left text-xs";
+    button.textContent = "★ " + track.title + " · " + track.artist;
+    button.addEventListener("click",() => replaySavedTrack(track));
+    favoriteBox.appendChild(button);
+  });
 }
 
+function replaySavedTrack(track) {
+  if(track.isOnline) {
+    queue = [track];
+    queueIndex = 0;
+    playTrack(track);
+  } else {
+    const local = localTracks.find(item => item.id === track.id);
+    if(local) {
+      queue = [local];
+      queueIndex = 0;
+      playTrack(local);
+    } else {
+      alert("Import this local track again to play it.");
+    }
+  }
+}
+
+/* LOCAL LIBRARY */
+
 function renderLibrary() {
-  const container = document.getElementById('library-track-list');
-  if (!container) return;
+  const box = document.getElementById("library-list");
+  if(!box) return;
 
-  container.innerHTML = '';
-
-  let list = [...localTracks];
-
-  if (activeLibraryTab === 'favorites') {
-    list = list.filter(t => state.favorites.has(t.id));
-  }
-
-  if (activeLibraryTab === 'recent') {
-    const recentIds = state.recentPlayed.map(t => t.id);
-    list.sort((a, b) => recentIds.indexOf(a.id) - recentIds.indexOf(b.id));
-    list = list.filter(t => recentIds.includes(t.id));
-  }
-
-  const search = document.getElementById('library-search-input').value.toLowerCase();
-
-  list = list.filter(t =>
-    (t.title || '').toLowerCase().includes(search) ||
-    (t.artist || '').toLowerCase().includes(search)
+  const filter = (document.getElementById("library-filter")?.value || "").toLowerCase();
+  const tracks = localTracks.filter(track =>
+    (track.title + " " + track.artist).toLowerCase().includes(filter)
   );
 
-  if (!list.length) {
-    container.innerHTML =
-      '<div class="p-8 text-center text-slate-500 text-xs">No songs found in this section.</div>';
+  box.innerHTML = "";
+
+  if(!tracks.length) {
+    box.innerHTML = '<p class="text-xs text-slate-500 text-center p-8">No local songs found. Import some music to get started.</p>';
     return;
   }
 
-  list.forEach((track, index) => {
-    const row = document.createElement('div');
+  tracks.forEach((track,index) => {
+    const row = document.createElement("div");
+    row.className = "flex items-center gap-3 p-3 rounded-xl hover:bg-white/5";
 
-    row.className =
-      'p-3 hover:bg-white/5 grid grid-cols-12 gap-2 items-center text-xs transition';
-
-    const number = document.createElement('div');
-    number.className = 'col-span-1 text-center font-mono text-slate-500';
+    const number = document.createElement("span");
+    number.className = "text-xs text-slate-500 w-5";
     number.textContent = index + 1;
 
-    const main = document.createElement('div');
-    main.className =
-      'col-span-6 sm:col-span-5 flex items-center space-x-3 min-w-0 cursor-pointer';
+    const cover = document.createElement("img");
+    cover.src = track.cover;
+    cover.className = "w-10 h-10 rounded-lg object-cover";
 
-    const cover = document.createElement('img');
-    cover.src = track.cover || '';
-    cover.className = 'w-8 h-8 rounded-lg object-cover';
-
-    const title = document.createElement('span');
-    title.className = 'font-bold text-slate-200 truncate';
-    title.textContent = track.title;
-
-    main.append(cover, title);
-    main.addEventListener('click', () => {
-      state.queue = [...list];
-      state.queueIndex = index;
-      playSingleTrack(track);
+    const details = document.createElement("button");
+    details.className = "flex-1 min-w-0 text-left";
+    details.innerHTML = '<b class="block text-xs truncate"></b><small class="text-slate-400"></small>';
+    details.querySelector("b").textContent = track.title;
+    details.querySelector("small").textContent = track.artist;
+    details.addEventListener("click",() => {
+      queue = tracks;
+      queueIndex = tracks.findIndex(item => item.id === track.id);
+      playTrack(track);
     });
 
-    const artist = document.createElement('div');
-    artist.className = 'hidden sm:block sm:col-span-3 text-slate-400 truncate';
-    artist.textContent = track.artist;
+    const remove = document.createElement("button");
+    remove.className = "text-slate-500 hover:text-red-400 px-3";
+    remove.textContent = "✕";
+    remove.addEventListener("click",() => deleteTrack(track.id));
 
-    const album = document.createElement('div');
-    album.className = 'hidden md:block md:col-span-2 text-slate-500 truncate';
-    album.textContent = track.album;
-
-    const actions = document.createElement('div');
-    actions.className = 'col-span-5 sm:col-span-3 md:col-span-1 text-right';
-
-    const fav = document.createElement('button');
-    fav.className = 'p-1 text-pink-400';
-    fav.textContent = state.favorites.has(track.id) ? '★' : '☆';
-    fav.title = 'Toggle favourite';
-
-    fav.addEventListener('click', e => {
-      e.stopPropagation();
-      toggleFavoriteTrack(track);
-    });
-
-    const remove = document.createElement('button');
-    remove.className = 'p-1 text-slate-500 hover:text-red-400';
-    remove.textContent = '✕';
-    remove.title = 'Delete track';
-
-    remove.addEventListener('click', e => {
-      e.stopPropagation();
-      deleteTrackFromDB(track.id);
-    });
-
-    actions.append(fav, remove);
-    row.append(number, main, artist, album, actions);
-    container.appendChild(row);
+    row.append(number,cover,details,remove);
+    box.appendChild(row);
   });
 }
 
-function deleteTrackFromDB(id) {
-  if (!db) return;
+function deleteTrack(id) {
+  if(!db) return;
+  if(!confirm("Delete this imported track?")) return;
 
-  if (!confirm('Delete this local song?')) return;
-
-  const tx = db.transaction('tracks', 'readwrite');
-  tx.objectStore('tracks').delete(id);
-  tx.oncomplete = () => {
-    loadLocalTracksFromDB();
+  const transaction = db.transaction("tracks","readwrite");
+  transaction.objectStore("tracks").delete(id);
+  transaction.oncomplete = () => {
+    if(currentTrack && currentTrack.id === id) {
+      audio.pause();
+      currentTrack = null;
+      isPlaying = false;
+      updatePlayerUI();
+    }
+    loadLocalTracks();
   };
 }
 
-/* ---------------- PLAYLISTS ---------------- */
+/* PLAYLISTS */
 
-function renderPlaylistsGrid() {
-  const grid = document.getElementById('playlists-grid');
-  if (!grid) return;
+function createPlaylist() {
+  const name = prompt("Enter a name for your playlist:");
+  if(!name || !name.trim()) return;
 
-  grid.innerHTML = '';
-
-  if (!state.playlists.length) {
-    grid.innerHTML =
-      '<div class="col-span-full text-center py-12 text-slate-500 text-xs">No playlists created yet. Click "+ New Playlist" above to create one!</div>';
-    return;
-  }
-
-  state.playlists.forEach((playlist, index) => {
-    const card = document.createElement('div');
-
-    card.className =
-      'dd-glass-card rounded-3xl p-5 border border-white/5 relative flex flex-col justify-between space-y-4';
-
-    const name = document.createElement('h3');
-    name.className = 'text-sm font-bold text-white truncate';
-    name.textContent = playlist.name;
-
-    const count = document.createElement('p');
-    count.className = 'text-[11px] text-slate-400 font-mono';
-    count.textContent = `${playlist.tracks.length} tracks`;
-
-    const play = document.createElement('button');
-    play.className =
-      'w-full py-2.5 rounded-xl bg-white/10 hover:bg-pink-600/30 text-xs font-bold text-slate-200';
-    play.textContent = 'Play Playlist';
-    play.onclick = () => playPlaylist(index);
-
-    const add = document.createElement('button');
-    add.className =
-      'w-full py-2 rounded-xl bg-pink-600/20 text-xs font-bold text-pink-300';
-    add.textContent = 'Add Current Song';
-    add.onclick = () => addCurrentTrackToPlaylist(index);
-
-    const remove = document.createElement('button');
-    remove.className = 'text-xs text-red-400 text-right';
-    remove.textContent = 'Delete Playlist';
-    remove.onclick = () => deletePlaylist(index);
-
-    card.append(name, count, play, add, remove);
-    grid.appendChild(card);
-  });
-}
-
-function promptCreatePlaylist() {
-  const name = prompt('Enter playlist name:');
-
-  if (!name || !name.trim()) return;
-
-  state.playlists.push({
-    name: name.trim(),
-    tracks: []
-  });
-
+  playlists.push({id:"pl_" + Date.now(),name:name.trim(),tracks:[]});
   savePlaylists();
-  renderPlaylistsGrid();
+  renderPlaylists();
 }
 
 function savePlaylists() {
-  localStorage.setItem('dd_playlists', JSON.stringify(state.playlists));
+  localStorage.setItem("dd_playlists",JSON.stringify(playlists));
 }
 
-function addCurrentTrackToPlaylist(index) {
-  if (!state.currentTrack) {
-    alert('Play a song first.');
+function renderPlaylists() {
+  const box = document.getElementById("playlist-grid");
+  if(!box) return;
+  box.innerHTML = "";
+
+  if(!playlists.length) {
+    box.innerHTML = '<p class="text-xs text-slate-500">No playlists yet. Create your first playlist.</p>';
     return;
   }
 
-  const track = state.currentTrack;
-  const playlist = state.playlists[index];
+  playlists.forEach(playlist => {
+    const card = document.createElement("div");
+    card.className = "dd-card rounded-2xl p-5";
+    const title = document.createElement("h3");
+    title.className = "font-bold";
+    title.textContent = "♫ " + playlist.name;
 
-  if (!playlist) return;
+    const count = document.createElement("p");
+    count.className = "text-xs text-slate-400 mt-2";
+    count.textContent = playlist.tracks.length + " tracks";
 
-  if (playlist.tracks.some(t => t.id === track.id)) {
-    alert('This song is already in that playlist.');
-    return;
-  }
+    const add = document.createElement("button");
+    add.className = "dd-gradient rounded-xl px-3 py-2 text-xs mt-4 mr-2";
+    add.textContent = "Add current track";
+    add.addEventListener("click",() => addCurrentToPlaylist(playlist.id));
 
-  playlist.tracks.push({
-    id: track.id,
-    title: track.title,
-    artist: track.artist,
-    album: track.album,
-    cover: track.cover,
-    src: track.src,
-    isOnline: track.isOnline
+    const play = document.createElement("button");
+    play.className = "dd-card rounded-xl px-3 py-2 text-xs mt-4";
+    play.textContent = "Play";
+    play.addEventListener("click",() => playPlaylist(playlist.id));
+
+    const remove = document.createElement("button");
+    remove.className = "text-red-400 text-xs mt-4 ml-3";
+    remove.textContent = "Delete";
+    remove.addEventListener("click",() => deletePlaylist(playlist.id));
+
+    card.append(title,count,add,play,remove);
+    box.appendChild(card);
   });
-
-  savePlaylists();
-  renderPlaylistsGrid();
-  alert('Song added to playlist.');
 }
 
-function deletePlaylist(index) {
-  if (!confirm('Delete this playlist?')) return;
-
-  state.playlists.splice(index, 1);
-  savePlaylists();
-  renderPlaylistsGrid();
-}
-
-function playPlaylist(index) {
-  const playlist = state.playlists[index];
-
-  if (!playlist || !playlist.tracks.length) {
-    alert('This playlist has no tracks to play.');
+function addCurrentToPlaylist(id) {
+  if(!currentTrack) {
+    alert("Play a track first.");
     return;
   }
 
-  state.queue = [...playlist.tracks];
-  state.queueIndex = 0;
-  playSingleTrack(state.queue[0]);
-}
+  const playlist = playlists.find(item => item.id === id);
+  if(!playlist) return;
 
-/* ---------------- RECENT AND FAVORITES ---------------- */
-
-function addToRecentHistory(track) {
-  const savedTrack = {
-    id: track.id,
-    title: track.title,
-    artist: track.artist,
-    album: track.album,
-    cover: track.cover,
-    src: track.src,
-    isOnline: track.isOnline
-  };
-
-  state.recentPlayed =
-    state.recentPlayed.filter(t => t.id !== track.id);
-
-  state.recentPlayed.unshift(savedTrack);
-  state.recentPlayed = state.recentPlayed.slice(0, 30);
-
-  localStorage.setItem(
-    'dd_recent',
-    JSON.stringify(state.recentPlayed)
-  );
-
-  renderHomeViews();
-}
-
-function renderHomeViews() {
-  const recentList = document.getElementById('home-recent-list');
-  if (!recentList) return;
-
-  recentList.innerHTML = '';
-
-  if (!state.recentPlayed.length) {
-    recentList.innerHTML =
-      '<div class="text-center py-8 text-slate-500 text-xs">No listening history yet.</div>';
-  } else {
-    state.recentPlayed.slice(0, 5).forEach(track => {
-      const row = document.createElement('div');
-      row.className =
-        'flex items-center justify-between p-2 rounded-2xl dd-glass-card cursor-pointer';
-
-      const title = document.createElement('span');
-      title.className = 'text-xs font-bold text-white truncate';
-      title.textContent = `${track.title} • ${track.artist}`;
-
-      row.appendChild(title);
-      row.onclick = () => playSingleTrack(track);
-
-      recentList.appendChild(row);
+  if(!playlist.tracks.some(item => item.id === currentTrack.id)) {
+    playlist.tracks.push({
+      id:currentTrack.id,
+      title:currentTrack.title,
+      artist:currentTrack.artist,
+      cover:currentTrack.cover,
+      src:currentTrack.isOnline ? currentTrack.src : "",
+      isOnline:!!currentTrack.isOnline
     });
   }
 
-  document.getElementById('recent-count-badge').innerText =
-    `${state.recentPlayed.length} tracks`;
-
-  renderFavorites();
+  savePlaylists();
+  renderPlaylists();
 }
 
-function toggleFavoriteTrack(track) {
-  if (state.favorites.has(track.id)) {
-    state.favorites.delete(track.id);
-  } else {
-    state.favorites.add(track.id);
-  }
-
-  localStorage.setItem(
-    'dd_favorites',
-    JSON.stringify([...state.favorites])
-  );
-
-  renderFavorites();
-  renderLibrary();
-  updateFavoriteButtonUI();
-}
-
-function toggleFavoriteCurrentTrack() {
-  if (!state.currentTrack) return;
-  toggleFavoriteTrack(state.currentTrack);
-}
-
-function renderFavorites() {
-  const container = document.getElementById('home-favorites-list');
-  if (!container) return;
-
-  container.innerHTML = '';
-
-  const favorites = [
-    ...localTracks.filter(t => state.favorites.has(t.id)),
-    ...state.recentPlayed.filter(t =>
-      state.favorites.has(t.id) &&
-      !localTracks.some(local => local.id === t.id)
-    )
-  ];
-
-  if (!favorites.length) {
-    container.innerHTML =
-      '<div class="text-center py-8 text-slate-500 text-xs">No favorite tracks saved.</div>';
+function playPlaylist(id) {
+  const playlist = playlists.find(item => item.id === id);
+  if(!playlist || !playlist.tracks.length) {
+    alert("This playlist is empty.");
     return;
   }
 
-  favorites.slice(0, 8).forEach(track => {
-    const row = document.createElement('div');
-    row.className =
-      'p-2 rounded-xl dd-glass-card cursor-pointer text-xs font-bold text-white';
-    row.textContent = `${track.title} • ${track.artist}`;
-    row.onclick = () => playSingleTrack(track);
-    container.appendChild(row);
+  queue = playlist.tracks.map(track => {
+    if(track.isOnline) return track;
+    return localTracks.find(local => local.id === track.id) || track;
   });
+
+  queueIndex = 0;
+  playTrack(queue[0]);
 }
 
-function updateFavoriteButtonUI() {
-  const button = document.querySelector(
-    '#full-player-modal button[onclick="toggleFavoriteCurrentTrack()"]'
-  );
-
-  if (!button || !state.currentTrack) return;
-
-  const isFavorite = state.favorites.has(state.currentTrack.id);
-
-  button.classList.toggle('text-pink-500', isFavorite);
-  button.classList.toggle('text-slate-400', !isFavorite);
+function deletePlaylist(id) {
+  if(!confirm("Delete this playlist?")) return;
+  playlists = playlists.filter(item => item.id !== id);
+  savePlaylists();
+  renderPlaylists();
 }
 
-/* ---------------- EQUALIZER ---------------- */
+/* WEB AUDIO ENGINE: LOCAL TRACKS ONLY */
 
-function initWebAudioEngine() {
+function initAudioEngine() {
   try {
-    const AudioContextClass =
-      window.AudioContext || window.webkitAudioContext;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if(!AudioContextClass) return;
 
-    state.audioCtx = new AudioContextClass();
+    audioContext = new AudioContextClass();
+    sourceNode = audioContext.createMediaElementSource(audio);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 128;
 
-    state.audioSourceNode =
-      state.audioCtx.createMediaElementSource(audio);
+    let previous = sourceNode;
 
-    state.analyser = state.audioCtx.createAnalyser();
-    state.analyser.fftSize = 64;
-
-    const frequencies = [60, 230, 910, 4000, 14000];
-
-    state.eqFilters = frequencies.map(frequency => {
-      const filter = state.audioCtx.createBiquadFilter();
-      filter.type = 'peaking';
+    frequencies.forEach(frequency => {
+      const filter = audioContext.createBiquadFilter();
+      filter.type = "peaking";
       filter.frequency.value = frequency;
       filter.Q.value = 1;
       filter.gain.value = 0;
-      return filter;
-    });
-
-    let previous = state.audioSourceNode;
-
-    state.eqFilters.forEach(filter => {
       previous.connect(filter);
       previous = filter;
+      eqFilters.push(filter);
     });
 
-    previous.connect(state.analyser);
-    state.analyser.connect(state.audioCtx.destination);
-
-    drawVisualizers();
-
-  } catch (error) {
-    console.warn('Equalizer initialization failed:', error);
+    previous.connect(analyser);
+    analyser.connect(audioContext.destination);
+    drawVisualizer();
+  } catch(error) {
+    console.warn("Equalizer could not initialize:",error);
   }
 }
 
-function updateEQBand(index, value) {
+function setEQ(index,value) {
   const gain = Number(value);
-
-  if (state.eqFilters[index]) {
-    state.eqFilters[index].gain.value = gain;
-  }
-
-  const label = document.getElementById(`eq-val-${index}`);
-  if (label) {
-    label.textContent = `${gain > 0 ? '+' : ''}${gain}dB`;
-  }
+  document.getElementById("eq-label-" + index).textContent = gain + " dB";
+  if(eqFilters[index]) eqFilters[index].gain.value = gain;
 }
 
-function applyEQPreset(preset) {
+function applyPreset(name) {
   const presets = {
-    normal: [0, 0, 0, 0, 0],
-    rock: [4, 2, -1, 3, 5],
-    pop: [-1, 2, 4, 2, -2],
-    jazz: [3, 1, 2, 2, -1],
-    bass: [8, 5, 1, 0, -2]
+    normal:[0,0,0,0,0],
+    rock:[4,2,-1,3,5],
+    pop:[-1,2,4,2,-2],
+    jazz:[3,1,2,2,-1],
+    bass:[8,5,1,0,-2]
   };
 
-  const values = presets[preset] || presets.normal;
-
-  values.forEach((value, index) => {
-    const slider =
-      document.querySelectorAll('.eq-vertical-slider')[index];
-
-    if (slider) slider.value = value;
-
-    updateEQBand(index, value);
+  (presets[name] || presets.normal).forEach((value,index) => {
+    const slider = document.querySelectorAll(".eq-slider")[index];
+    slider.value = value;
+    setEQ(index,value);
   });
 }
 
-function drawVisualizers() {
-  const canvas = document.getElementById('eq-visualizer-canvas');
-  const headerCanvas =
-    document.getElementById('header-spectrum-canvas');
+function drawVisualizer() {
+  const canvas = document.getElementById("visualizer");
+  if(!canvas || !analyser) return;
+  const ctx = canvas.getContext("2d");
 
-  if (!canvas || !state.analyser) return;
+  function draw() {
+    requestAnimationFrame(draw);
 
-  const ctx = canvas.getContext('2d');
-  const headerCtx = headerCanvas
-    ? headerCanvas.getContext('2d')
-    : null;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if(!width || !height) return;
 
-  function render() {
-    requestAnimationFrame(render);
-
-    if (!state.analyser) return;
-
-    if (!canvas.width || !canvas.height) {
-      canvas.width = canvas.clientWidth;
-      canvas.height = canvas.clientHeight;
+    if(canvas.width !== width * devicePixelRatio || canvas.height !== height * devicePixelRatio) {
+      canvas.width = width * devicePixelRatio;
+      canvas.height = height * devicePixelRatio;
     }
 
-    if (headerCanvas &&
-        (!headerCanvas.width || !headerCanvas.height)) {
-      headerCanvas.width = headerCanvas.clientWidth;
-      headerCanvas.height = headerCanvas.clientHeight;
-    }
+    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+    ctx.clearRect(0,0,width,height);
 
-    const data = new Uint8Array(
-      state.analyser.frequencyBinCount
-    );
+    const values = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(values);
 
-    state.analyser.getByteFrequencyData(data);
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const barWidth = canvas.width / data.length;
-    data.forEach((value, index) => {
-      const height = value / 255 * canvas.height;
-      ctx.fillStyle = '#FF0055';
-      ctx.fillRect(
-        index * barWidth,
-        canvas.height - height,
-        Math.max(1, barWidth - 2),
-        height
-      );
+    const barWidth = width / values.length;
+    values.forEach((value,index) => {
+      const barHeight = (value / 255) * height;
+      ctx.fillStyle = "#ff0055";
+      ctx.fillRect(index * barWidth,height - barHeight,Math.max(1,barWidth - 2),barHeight);
     });
-
-    if (headerCtx && headerCanvas) {
-      headerCtx.clearRect(
-        0, 0, headerCanvas.width, headerCanvas.height
-      );
-
-      const width = headerCanvas.width / data.length;
-
-      data.forEach((value, index) => {
-        const height = value / 255 * headerCanvas.height;
-        headerCtx.fillStyle = '#A855F7';
-        headerCtx.fillRect(
-          index * width,
-          headerCanvas.height - height,
-          Math.max(1, width - 2),
-          height
-        );
-      });
-    }
   }
 
-  render();
+  draw();
 }
 
-/* ---------------- LYRICS ---------------- */
+/* LYRICS */
 
-async function fetchLyricsForCurrentTrack() {
-  const track = state.currentTrack;
-  const container = document.getElementById('lyrics-container');
-
-  if (!track || !container) return;
-
-  container.textContent = 'Searching for lyrics...';
+async function fetchLyrics(track) {
+  const box = document.getElementById("lyrics");
+  box.textContent = "Searching for lyrics...";
 
   try {
-    const url =
-      `https://lrclib.net/api/get?artist_name=${encodeURIComponent(track.artist)}&track_name=${encodeURIComponent(track.title)}`;
+    const url = "https://lrclib.net/api/get?artist_name=" +
+      encodeURIComponent(track.artist) +
+      "&track_name=" + encodeURIComponent(track.title);
 
     const response = await fetch(url);
-    if (!response.ok) throw new Error('No lyrics');
-
+    if(!response.ok) throw new Error("No lyrics");
     const data = await response.json();
 
-    container.textContent =
-      data.plainLyrics || 'No lyrics found for this track.';
-
-  } catch (error) {
-    container.textContent = 'Lyrics unavailable for this track.';
+    if(currentTrack && currentTrack.id === track.id) {
+      box.textContent = data.plainLyrics || "No lyrics found for this track.";
+    }
+  } catch(error) {
+    box.textContent = "Lyrics are not available for this track.";
   }
 }
 
-/* ---------------- RINGTONE CUTTER ---------------- */
+/* RINGTONE CUTTER */
 
-function populateRingtoneTrackSelect() {
-  const select = document.getElementById('ringtone-track-select');
-  if (!select) return;
-
-  select.innerHTML =
-    '<option value="">-- Choose local track to cut --</option>';
+function populateRingtoneSelect() {
+  const select = document.getElementById("ringtone-select");
+  select.innerHTML = '<option value="">Choose a local track</option>';
 
   localTracks.forEach(track => {
-    const option = document.createElement('option');
+    const option = document.createElement("option");
     option.value = track.id;
     option.textContent = track.title;
     select.appendChild(option);
   });
 }
 
-function loadTrackForRingtone() {
-  const id =
-    document.getElementById('ringtone-track-select').value;
+function loadRingtoneTrack() {
+  const id = document.getElementById("ringtone-select").value;
+  const track = localTracks.find(item => item.id === id);
+  const controls = document.getElementById("trim-controls");
 
-  document.getElementById('ringtone-editor')
-    .classList.toggle('hidden', !id);
+  controls.classList.toggle("hidden",!track);
+  if(!track) return;
 
-  const track = localTracks.find(t => t.id === id);
-
-  if (!track) return;
-
-  const start = document.getElementById('trim-start-range');
-  const end = document.getElementById('trim-end-range');
-
-  start.value = 0;
-  end.value = 30;
-
-  updateTrimRange();
+  const probe = new Audio();
+  probe.src = URL.createObjectURL(track.fileBlob);
+  probe.addEventListener("loadedmetadata",() => {
+    const duration = Math.floor(probe.duration);
+    document.getElementById("trim-start").max = Math.max(0,duration - 1);
+    document.getElementById("trim-end").max = duration;
+    document.getElementById("trim-end").value = Math.min(30,duration);
+    updateTrimLabels();
+    URL.revokeObjectURL(probe.src);
+  },{once:true});
 }
 
-function updateTrimRange() {
-  const start = Number(
-    document.getElementById('trim-start-range').value
-  );
+function updateTrimLabels() {
+  const start = Number(document.getElementById("trim-start").value);
+  const end = Number(document.getElementById("trim-end").value);
 
-  const end = Number(
-    document.getElementById('trim-end-range').value
-  );
-
-  document.getElementById('trim-start-text').textContent =
-    start + 's';
-
-  document.getElementById('trim-end-text').textContent =
-    end + 's';
+  document.getElementById("start-label").textContent = start + "s";
+  document.getElementById("end-label").textContent = end + "s";
 }
 
-async function exportRingtoneWAV() {
-  const id =
-    document.getElementById('ringtone-track-select').value;
+async function exportRingtone() {
+  const id = document.getElementById("ringtone-select").value;
+  const track = localTracks.find(item => item.id === id);
+  if(!track || !(track.fileBlob instanceof Blob)) return;
 
-  const track = localTracks.find(t => t.id === id);
+  const start = Number(document.getElementById("trim-start").value);
+  const end = Number(document.getElementById("trim-end").value);
 
-  if (!track || !(track.fileBlob instanceof Blob)) {
-    alert('Choose a valid local audio track.');
+  if(end <= start) {
+    alert("The ending point must be after the starting point.");
     return;
   }
 
+  const message = document.getElementById("ringtone-message");
+  message.textContent = "Preparing your ringtone...";
+
   try {
-    const buffer = await track.fileBlob.arrayBuffer();
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+    const buffer = await context.decodeAudioData(await track.fileBlob.arrayBuffer());
 
-    const context = new (
-      window.AudioContext || window.webkitAudioContext
-    )();
-
-    const decoded = await context.decodeAudioData(buffer);
-
-    const start = Number(
-      document.getElementById('trim-start-range').value
-    );
-
-    const end = Number(
-      document.getElementById('trim-end-range').value
-    );
-
-    if (end <= start || start >= decoded.duration) {
-      alert('Choose a valid start and end time.');
-      await context.close();
+    if(end > buffer.duration) {
+      alert("The selected ending point is longer than the song.");
       return;
     }
 
-    const duration = Math.min(end, decoded.duration) - start;
+    const frameStart = Math.floor(start * buffer.sampleRate);
+    const frameEnd = Math.floor(end * buffer.sampleRate);
+    const frameCount = frameEnd - frameStart;
 
     const offline = new OfflineAudioContext(
-      decoded.numberOfChannels,
-      Math.ceil(duration * decoded.sampleRate),
-      decoded.sampleRate
+      buffer.numberOfChannels,
+      frameCount,
+      buffer.sampleRate
     );
 
     const source = offline.createBufferSource();
-    source.buffer = decoded;
+    source.buffer = buffer;
     source.connect(offline.destination);
-    source.start(0, start, duration);
+    source.start(0,start,end - start);
 
     const rendered = await offline.startRendering();
     const wav = audioBufferToWav(rendered);
-
     const url = URL.createObjectURL(wav);
-    const link = document.createElement('a');
 
+    const link = document.createElement("a");
     link.href = url;
-    link.download = `${track.title}_ringtone.wav`;
+    link.download = track.title.replace(/[^\w-]/g,"_") + "_ringtone.wav";
     link.click();
 
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => URL.revokeObjectURL(url),1000);
+    message.textContent = "Your ringtone has been exported.";
     await context.close();
-
-  } catch (error) {
+  } catch(error) {
     console.error(error);
-    alert('Could not export this ringtone. Try another audio file.');
+    message.textContent = "Could not export this ringtone.";
   }
 }
 
@@ -1207,1336 +1155,137 @@ function audioBufferToWav(buffer) {
   const samples = buffer.length;
   const bytesPerSample = 2;
   const dataSize = samples * channels * bytesPerSample;
-
   const output = new ArrayBuffer(44 + dataSize);
   const view = new DataView(output);
 
-  function writeString(offset, value) {
-    for (let i = 0; i < value.length; i++) {
-      view.setUint8(offset + i, value.charCodeAt(i));
-    }
+  function writeString(offset,string) {
+    for(let i=0;i<string.length;i++) view.setUint8(offset+i,string.charCodeAt(i));
   }
 
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + dataSize, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, channels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * channels * 2, true);
-  view.setUint16(32, channels * 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, 'data');
-  view.setUint32(40, dataSize, true);
+  writeString(0,"RIFF");
+  view.setUint32(4,36+dataSize,true);
+  writeString(8,"WAVE");
+  writeString(12,"fmt ");
+  view.setUint32(16,16,true);
+  view.setUint16(20,1,true);
+  view.setUint16(22,channels,true);
+  view.setUint32(24,sampleRate,true);
+  view.setUint32(28,sampleRate*channels*bytesPerSample,true);
+  view.setUint16(32,channels*bytesPerSample,true);
+  view.setUint16(34,16,true);
+  writeString(36,"data");
+  view.setUint32(40,dataSize,true);
 
   let offset = 44;
 
-  for (let i = 0; i < samples; i++) {
-    for (let channel = 0; channel < channels; channel++) {
+  for(let i=0;i<samples;i++) {
+    for(let channel=0;channel<channels;channel++) {
       let sample = buffer.getChannelData(channel)[i];
-      sample = Math.max(-1, Math.min(1, sample));
-
-      view.setInt16(
-        offset,
-        sample < 0 ? sample * 32768 : sample * 32767,
-        true
-      );
-
+      sample = Math.max(-1,Math.min(1,sample));
+      view.setInt16(offset,sample < 0 ? sample*32768 : sample*32767,true);
       offset += 2;
     }
   }
 
-  return new Blob([output], { type: 'audio/wav' });
+  return new Blob([output],{type:"audio/wav"});
 }
 
-/* ---------------- SLEEP TIMER ---------------- */
+/* SLEEP TIMER */
 
-function openSleepTimerModal() {
-  const modal = document.getElementById('sleep-timer-modal');
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
+function openSleepTimer() {
+  const modal = document.getElementById("sleep-modal");
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
 }
 
-function closeSleepTimerModal() {
-  const modal = document.getElementById('sleep-timer-modal');
-  modal.classList.add('hidden');
-  modal.classList.remove('flex');
+function closeSleepTimer() {
+  const modal = document.getElementById("sleep-modal");
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
 }
 
 function setSleepTimer(minutes) {
-  if (state.sleepTimerTimeout) {
-    clearTimeout(state.sleepTimerTimeout);
-  }
+  clearTimeout(sleepTimeout);
 
-  state.sleepTimerTimeout = setTimeout(() => {
-    if (state.isPlaying) togglePlayPause();
+  sleepTimeout = setTimeout(() => {
+    audio.pause();
+    onlineAudio.pause();
+    isPlaying = false;
+    updatePlayerUI();
+    document.getElementById("timer-label").textContent = "Sleep Timer";
+  },minutes * 60 * 1000);
 
-    document.getElementById('sleep-timer-label').textContent =
-      'Sleep Timer';
-
-    state.sleepTimerTimeout = null;
-  }, minutes * 60 * 1000);
-
-  document.getElementById('sleep-timer-label').textContent =
-    `${minutes}m Timer`;
-
-  closeSleepTimerModal();
+  document.getElementById("timer-label").textContent = minutes + " min timer";
+  closeSleepTimer();
 }
 
 function cancelSleepTimer() {
-  if (state.sleepTimerTimeout) {
-    clearTimeout(state.sleepTimerTimeout);
-  }
-
-  state.sleepTimerTimeout = null;
-
-  document.getElementById('sleep-timer-label').textContent =
-    'Sleep Timer';
-
-  closeSleepTimerModal();
+  clearTimeout(sleepTimeout);
+  sleepTimeout = null;
+  document.getElementById("timer-label").textContent = "Sleep Timer";
+  closeSleepTimer();
 }
 
-/* ---------------- FULL PLAYER ---------------- */
+/* FULL PLAYER */
 
-function openFullNowPlaying() {
-  const modal = document.getElementById('full-player-modal');
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
+function openFullPlayer() {
+  const modal = document.getElementById("full-player");
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+  if(currentTrack) updateTrackDetails();
 }
 
-function closeFullNowPlaying() {
-  const modal = document.getElementById('full-player-modal');
-  modal.classList.add('hidden');
-  modal.classList.remove('flex');
+function closeFullPlayer() {
+  const modal = document.getElementById("full-player");
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
 }
 
-/* ---------------- UTILITIES ---------------- */
+/* NAVIGATION */
 
-function formatTime(seconds) {
-  if (!isFinite(seconds) || isNaN(seconds)) return '0:00';
+function switchView(name) {
+  document.querySelectorAll(".view").forEach(view => view.classList.remove("active"));
+  document.getElementById("view-" + name).classList.add("active");
 
-  const minutes = Math.floor(seconds / 60);
-  const remainder = Math.floor(seconds % 60);
+  document.querySelectorAll("#sidebar button").forEach(button => {
+    button.classList.remove("nav-active");
+  });
 
-  return `${minutes}:${remainder < 10 ? '0' : ''}${remainder}`;
+  const nav = document.getElementById("nav-" + name);
+  if(nav) nav.classList.add("nav-active");
+
+  if(name === "library") renderLibrary();
+  if(name === "playlists") renderPlaylists();
+  if(name === "ringtone") populateRingtoneSelect();
+
+  document.getElementById("sidebar").classList.add("hidden");
+  document.getElementById("sidebar").classList.remove("fixed","inset-0");
 }
 
-function clearIndexedDBData() {
-  if (!confirm('Clear all local songs and music settings?')) return;
-
-  if (db) db.close();
-
-  indexedDB.deleteDatabase('DDMusicDB');
-  localStorage.clear();
-
-  location.reload();
+function toggleMobileNav() {
+  const sidebar = document.getElementById("sidebar");
+  sidebar.classList.toggle("hidden");
+  sidebar.classList.toggle("fixed");
+  sidebar.classList.toggle("inset-0");
 }
-  </style>
-</head>
-<body class="h-full bg-[#050508] text-slate-200 antialiased font-sans flex flex-col overflow-hidden">
 
-  <!-- APP CONTAINER -->
-  <div class="flex flex-1 h-full overflow-hidden relative">
+function clearMusicData() {
+  if(!confirm("Delete all imported music and saved DD Music data?")) return;
 
-    <!-- DD MUSIC LEFT RAIL SIDEBAR -->
-    <aside id="sidebar-nav" class="hidden md:flex flex-col w-64 dd-glass border-r border-white/5 z-30 shrink-0">
-      
-      <!-- Brand Logo -->
-      <div class="p-6 flex items-center justify-between">
-        <div class="flex items-center space-x-3 cursor-pointer" onclick="switchView('home')">
-          <div class="w-10 h-10 rounded-2xl dd-btn-gradient flex items-center justify-center">
-            <!-- DD Vinyl Disc Icon -->
-            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="9" stroke-width="2"/>
-              <circle cx="12" cy="12" r="3" stroke-width="2"/>
-              <path stroke-linecap="round" d="M12 3a9 9 0 0 1 9 9"/>
-            </svg>
-          </div>
-          <div>
-            <h1 class="text-xl font-black tracking-wider gradient-text font-mono">DD MUSIC</h1>
-            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">MI Player Pro</p>
-          </div>
-        </div>
-      </div>
+  audio.pause();
+  onlineAudio.pause();
 
-      <!-- Main Rail Navigation -->
-      <nav class="flex-1 px-3 space-y-1.5 overflow-y-auto">
-        <div class="px-4 pt-2 pb-1 text-[11px] font-extrabold text-slate-500 uppercase tracking-widest">Discover</div>
-        
-        <button id="nav-home" onclick="switchView('home')" class="nav-item nav-item-active w-full flex items-center justify-between px-4 py-3 rounded-2xl text-slate-400 hover:text-white transition text-xs font-bold">
-          <div class="flex items-center space-x-3">
-            <svg class="w-5 h-5 text-dd-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-            <span>Home Hub</span>
-          </div>
-        </button>
+  if(db) db.close();
 
-        <button id="nav-search" onclick="switchView('search')" class="nav-item w-full flex items-center justify-between px-4 py-3 rounded-2xl text-slate-400 hover:text-white transition text-xs font-bold">
-          <div class="flex items-center space-x-3">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-            <span>Online Search</span>
-          </div>
-          <span class="px-2 py-0.5 text-[9px] font-extrabold bg-pink-500/20 text-pink-400 rounded-full border border-pink-500/30">Live</span>
-        </button>
+  const request = indexedDB.deleteDatabase("DDMusicDB");
+  request.onsuccess = () => {
+    localStorage.removeItem("dd_playlists");
+    localStorage.removeItem("dd_favorites");
+    localStorage.removeItem("dd_recent");
+    location.reload();
+  };
+}
+</script>
 
-        <div class="px-4 pt-4 pb-1 text-[11px] font-extrabold text-slate-500 uppercase tracking-widest">My Audio</div>
-
-        <button id="nav-library" onclick="switchView('library')" class="nav-item w-full flex items-center justify-between px-4 py-3 rounded-2xl text-slate-400 hover:text-white transition text-xs font-bold">
-          <div class="flex items-center space-x-3">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-            <span>Local Library</span>
-          </div>
-          <span id="nav-lib-count" class="text-[10px] text-slate-500">0</span>
-        </button>
-
-        <button id="nav-playlists" onclick="switchView('playlists')" class="nav-item w-full flex items-center justify-between px-4 py-3 rounded-2xl text-slate-400 hover:text-white transition text-xs font-bold">
-          <div class="flex items-center space-x-3">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h10"/></svg>
-            <span>Playlists</span>
-          </div>
-        </button>
-
-        <div class="px-4 pt-4 pb-1 text-[11px] font-extrabold text-slate-500 uppercase tracking-widest">Studio Studio</div>
-
-        <button id="nav-equalizer" onclick="switchView('equalizer')" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-slate-400 hover:text-white transition text-xs font-bold">
-          <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 010 4m-6 8a2 2 0 100-4m0 4a2 2 0 010-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 010-4m0 4v2m0-6V4"/></svg>
-          <span>5-Band EQ & FX</span>
-        </button>
-
-        <button id="nav-ringtone" onclick="switchView('ringtone')" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-slate-400 hover:text-white transition text-xs font-bold">
-          <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 0L4 4m5.121 5.121L4 19"/></svg>
-          <span>Ringtone Cutter</span>
-        </button>
-
-        <button id="nav-settings" onclick="switchView('settings')" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-slate-400 hover:text-white transition text-xs font-bold">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-          <span>Preferences</span>
-        </button>
-      </nav>
-
-      <!-- Import Local Files Card -->
-      <div class="p-4 m-3 rounded-3xl dd-glass border border-pink-500/20 text-center">
-        <p class="text-xs font-bold text-slate-200 mb-2">Import Local Songs</p>
-        <label for="dd-file-input" class="cursor-pointer flex items-center justify-center w-full py-2.5 px-3 text-xs font-bold rounded-2xl dd-btn-gradient text-white transition">
-          <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-          Browse Files
-        </label>
-        <input type="file" id="dd-file-input" multiple accept="audio/*" class="hidden" onchange="handleLocalFilesSelect(event)">
-      </div>
-    </aside>
-
-    <!-- MAIN DD CONTENT VIEWPORT -->
-    <main class="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-      
-      <!-- Top DD Header Bar -->
-      <header class="h-20 px-6 border-b border-white/5 flex items-center justify-between z-20 shrink-0 bg-[#050508]/60 backdrop-blur-md">
-        
-        <!-- Search Trigger / View Title -->
-        <div class="flex items-center space-x-4">
-          <button onclick="toggleMobileNav()" class="md:hidden p-2 text-slate-400 hover:text-white">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-          </button>
-          
-          <div class="relative w-64 sm:w-80">
-            <input type="text" id="header-quick-search" onkeypress="if(event.key==='Enter'){ switchView('search'); handleOnlineSearchFromVal(this.value); }" 
-              placeholder="Search tracks, artists, albums..." 
-              class="w-full bg-slate-900/90 border border-white/10 focus:border-pink-500 rounded-full px-4 py-2 pl-10 text-xs text-slate-200 placeholder-slate-500 outline-none transition">
-            <svg class="w-4 h-4 text-slate-500 absolute left-3.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          </div>
-        </div>
-
-        <!-- Right Quick Actions -->
-        <div class="flex items-center space-x-3">
-          <!-- Real-time Mini Spectrum Visualizer Canvas -->
-          <div class="hidden sm:block w-32 h-8 rounded-xl bg-slate-900/60 border border-white/5 overflow-hidden">
-            <canvas id="header-spectrum-canvas" class="w-full h-full"></canvas>
-          </div>
-
-          <!-- Sleep Timer Button -->
-          <button onclick="openSleepTimerModal()" class="flex items-center space-x-1.5 px-3 py-2 rounded-full dd-glass-card text-xs font-semibold hover:border-pink-500/40">
-            <svg class="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <span id="sleep-timer-label">Sleep Timer</span>
-          </button>
-        </div>
-      </header>
-
-      <!-- VIEW CANVAS CONTAINER -->
-      <div id="view-container" class="flex-1 overflow-y-auto p-4 sm:p-8 pb-32">
-        
-        <!-- VIEW 1: HOME HUB -->
-        <div id="view-home" class="view-content space-y-8">
-          
-          <!-- DD Music Hero Feature Banner -->
-          <div class="relative rounded-3xl p-6 sm:p-10 border border-pink-500/20 shadow-2xl bg-gradient-to-r from-pink-950/40 via-purple-950/30 to-slate-950 flex flex-col md:flex-row items-center justify-between gap-8 overflow-hidden">
-            <!-- Glow background blob -->
-            <div class="absolute -top-10 -left-10 w-64 h-64 bg-pink-600/20 rounded-full blur-3xl pointer-events-none"></div>
-
-            <div class="space-y-4 z-10 max-w-xl text-center md:text-left">
-              <span class="px-3 py-1 text-[10px] font-black tracking-widest uppercase text-pink-400 bg-pink-500/10 rounded-full border border-pink-500/20">DD MUSIC EDITION</span>
-              <h2 class="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">
-                Immersive <br><span class="dd-gradient-text">Audiophile Sound</span>
-              </h2>
-              <p class="text-xs sm:text-sm text-slate-300">Discover millions of online tracks or enjoy lossless playback of your local audio files with custom Biquad equalizer processing.</p>
-              
-              <div class="pt-2 flex flex-wrap gap-3 justify-center md:justify-start">
-                <button onclick="switchView('search')" class="px-6 py-3 rounded-full font-bold text-xs dd-btn-gradient text-white flex items-center space-x-2">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                  <span>Explore Online Tracks</span>
-                </button>
-                <button onclick="document.getElementById('dd-file-input').click()" class="px-6 py-3 rounded-full font-bold text-xs dd-glass-card text-slate-200 hover:text-white flex items-center space-x-2">
-                  <svg class="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                  <span>Import Local Tracks</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- DD Interactive Vinyl Record Turntable Deck -->
-            <div class="relative shrink-0 flex items-center justify-center p-4">
-              <!-- Vinyl Record -->
-              <div id="hero-vinyl-disc" class="w-44 h-44 sm:w-52 sm:h-52 rounded-full bg-slate-950 border-4 border-slate-800 shadow-2xl flex items-center justify-center relative animate-spin-vinyl paused-animation">
-                <!-- Grooves -->
-                <div class="w-36 h-36 rounded-full border border-slate-800/80 flex items-center justify-center">
-                  <div class="w-28 h-28 rounded-full border border-slate-800/60 flex items-center justify-center">
-                    <!-- Center Label -->
-                    <div class="w-16 h-16 rounded-full dd-btn-gradient flex items-center justify-center text-white font-black text-xs shadow-inner">
-                      DD
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- Tonearm Arm -->
-              <div id="hero-tonearm" class="tonearm absolute top-0 right-4 w-12 h-28 pointer-events-none">
-                <svg viewBox="0 0 50 100" class="w-full h-full text-slate-300 drop-shadow-md">
-                  <circle cx="20" cy="20" r="10" fill="#334155"/>
-                  <path d="M20 20 L30 70 L20 85" fill="none" stroke="#94A3B8" stroke-width="4" stroke-linecap="round"/>
-                  <rect x="14" y="82" width="12" height="15" rx="2" fill="#FF0055"/>
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <!-- Featured Online Top Discoveries -->
-          <section class="space-y-4">
-            <div class="flex items-center justify-between">
-              <h3 class="text-lg font-black text-white flex items-center gap-2">
-                <span class="w-2 h-5 bg-pink-500 rounded-full inline-block"></span>
-                Top Trending Online Hits
-              </h3>
-              <button onclick="switchView('search')" class="text-xs font-bold text-pink-400 hover:underline">View All &rarr;</button>
-            </div>
-            <div id="home-featured-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              <div class="col-span-full py-12 text-center text-slate-500 text-xs">Loading featured tracks...</div>
-            </div>
-          </section>
-
-          <!-- Recently Played & Quick Library Split -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Recently Played -->
-            <section class="dd-glass p-6 rounded-3xl space-y-4">
-              <div class="flex items-center justify-between">
-                <h3 class="text-base font-bold text-white">Recently Played</h3>
-                <span id="recent-count-badge" class="text-xs text-slate-500 font-mono">0 tracks</span>
-              </div>
-              <div id="home-recent-list" class="space-y-2 max-h-72 overflow-y-auto pr-1">
-                <div class="text-center py-8 text-slate-500 text-xs">No listening history yet.</div>
-              </div>
-            </section>
-
-            <!-- Favorites List -->
-            <section class="dd-glass p-6 rounded-3xl space-y-4">
-              <div class="flex items-center justify-between">
-                <h3 class="text-base font-bold text-white">Favorite Songs</h3>
-                <button onclick="switchView('library')" class="text-xs text-pink-400 hover:underline font-bold">Go to Library</button>
-              </div>
-              <div id="home-favorites-list" class="space-y-2 max-h-72 overflow-y-auto pr-1">
-                <div class="text-center py-8 text-slate-500 text-xs">No favorite tracks saved.</div>
-              </div>
-            </section>
-          </div>
-        </div>
-
-        <!-- VIEW 2: ONLINE SEARCH -->
-        <div id="view-search" class="view-content hidden space-y-6">
-          <div class="dd-glass p-6 rounded-3xl space-y-4 border border-pink-500/20">
-            <h2 class="text-2xl font-black text-white">Online Song Discovery</h2>
-            <p class="text-xs text-slate-400">Search millions of live streamable preview tracks via iTunes API Catalogue.</p>
-
-            <form onsubmit="handleOnlineSearch(event)" class="flex gap-3">
-              <div class="relative flex-1">
-                <input type="text" id="online-search-input" placeholder="Type song title, artist, or album name..." 
-                  class="w-full bg-slate-900 border border-white/10 focus:border-pink-500 rounded-2xl px-4 py-3.5 pl-11 text-sm text-slate-100 placeholder-slate-500 outline-none transition">
-                <svg class="w-5 h-5 text-slate-500 absolute left-3.5 top-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-              </div>
-              <button type="submit" class="px-8 py-3.5 rounded-2xl font-extrabold text-xs dd-btn-gradient text-white">
-                Search
-              </button>
-            </form>
-
-            <div class="flex flex-wrap gap-2 text-xs text-slate-400 pt-1">
-              <span class="text-slate-500">Popular Queries:</span>
-              <button onclick="quickSearch('Taylor Swift')" class="hover:text-pink-400 underline">Taylor Swift</button>
-              <button onclick="quickSearch('Drake')" class="hover:text-pink-400 underline">Drake</button>
-              <button onclick="quickSearch('Cyberpunk')" class="hover:text-pink-400 underline">Cyberpunk Synthwave</button>
-              <button onclick="quickSearch('Acoustic Chill')" class="hover:text-pink-400 underline">Chillhop</button>
-            </div>
-          </div>
-
-          <div id="search-loading" class="hidden py-16 text-center space-y-3">
-            <div class="w-10 h-10 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p class="text-xs text-slate-400 font-bold">Querying iTunes Music Catalog...</p>
-          </div>
-
-          <div id="search-results-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            <div class="col-span-full text-center py-16 text-slate-500 text-xs">Search for songs above to stream live audio.</div>
-          </div>
-        </div>
-
-        <!-- VIEW 3: MY LIBRARY -->
-        <div id="view-library" class="view-content hidden space-y-6">
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 dd-glass p-4 rounded-3xl">
-            <div class="flex flex-wrap gap-2">
-              <button onclick="filterLibraryTab('all')" data-tab="all" class="lib-tab px-4 py-2 rounded-2xl text-xs font-bold bg-pink-600 text-white">All Songs</button>
-              <button onclick="filterLibraryTab('favorites')" data-tab="favorites" class="lib-tab px-4 py-2 rounded-2xl text-xs font-bold text-slate-400 dd-glass-card">Favorites</button>
-              <button onclick="filterLibraryTab('recent')" data-tab="recent" class="lib-tab px-4 py-2 rounded-2xl text-xs font-bold text-slate-400 dd-glass-card">Recently Played</button>
-            </div>
-
-            <div class="flex items-center space-x-3">
-              <input id="library-search-input" oninput="renderLibrary()" type="text" placeholder="Filter local library..." 
-                class="bg-slate-900 border border-white/10 text-xs rounded-xl px-3 py-2 text-slate-200 outline-none focus:border-pink-500">
-            </div>
-          </div>
-
-          <div class="dd-glass rounded-3xl overflow-hidden">
-            <div class="p-4 border-b border-white/5 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider grid grid-cols-12 gap-2">
-              <div class="col-span-1 text-center">#</div>
-              <div class="col-span-6 sm:col-span-5">Title & Track</div>
-              <div class="hidden sm:block sm:col-span-3">Artist</div>
-              <div class="hidden md:block md:col-span-2">Album</div>
-              <div class="col-span-5 sm:col-span-3 md:col-span-1 text-right pr-2">Actions</div>
-            </div>
-            <div id="library-track-list" class="divide-y divide-white/5 max-h-[550px] overflow-y-auto">
-              <!-- Rendered via JS -->
-            </div>
-          </div>
-        </div>
-
-        <!-- VIEW 4: PLAYLISTS -->
-        <div id="view-playlists" class="view-content hidden space-y-6">
-          <div class="flex items-center justify-between">
-            <h2 class="text-2xl font-black text-white">Custom Playlists</h2>
-            <button onclick="promptCreatePlaylist()" class="px-5 py-2.5 rounded-2xl dd-btn-gradient text-xs font-bold text-white">
-              + New Playlist
-            </button>
-          </div>
-          <div id="playlists-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            <!-- Playlist Cards -->
-          </div>
-        </div>
-
-        <!-- VIEW 5: EQUALIZER -->
-        <div id="view-equalizer" class="view-content hidden space-y-6">
-          <div class="dd-glass p-6 sm:p-8 rounded-3xl border border-pink-500/20 space-y-8">
-            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
-              <div>
-                <h2 class="text-2xl font-black text-white">DD Master Audio Equalizer</h2>
-                <p class="text-xs text-slate-400">Web Audio BiquadFilter Engine with frequency gain controls.</p>
-              </div>
-            </div>
-
-            <!-- Presets -->
-            <div class="space-y-2">
-              <label class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Acoustic Presets</label>
-              <div class="flex flex-wrap gap-2">
-                <button onclick="applyEQPreset('normal')" class="px-4 py-2 rounded-2xl text-xs font-bold dd-glass-card hover:bg-pink-600/30">Normal</button>
-                <button onclick="applyEQPreset('rock')" class="px-4 py-2 rounded-2xl text-xs font-bold dd-glass-card hover:bg-pink-600/30">Rock</button>
-                <button onclick="applyEQPreset('pop')" class="px-4 py-2 rounded-2xl text-xs font-bold dd-glass-card hover:bg-pink-600/30">Pop</button>
-                <button onclick="applyEQPreset('jazz')" class="px-4 py-2 rounded-2xl text-xs font-bold dd-glass-card hover:bg-pink-600/30">Jazz</button>
-                <button onclick="applyEQPreset('bass')" class="px-4 py-2 rounded-2xl text-xs font-bold dd-glass-card hover:bg-pink-600/30">Bass Boost</button>
-              </div>
-            </div>
-
-            <!-- Vertical Sliders -->
-            <div class="grid grid-cols-5 gap-4 py-6 bg-slate-950/80 rounded-3xl p-6 border border-white/5 text-center">
-              <div class="flex flex-col items-center space-y-3">
-                <span id="eq-val-0" class="text-xs font-mono text-pink-400">+0dB</span>
-                <input type="range" min="-12" max="12" value="0" step="1" oninput="updateEQBand(0, this.value)" class="eq-vertical-slider">
-                <span class="text-xs font-bold text-slate-400">60 Hz</span>
-              </div>
-              <div class="flex flex-col items-center space-y-3">
-                <span id="eq-val-1" class="text-xs font-mono text-pink-400">+0dB</span>
-                <input type="range" min="-12" max="12" value="0" step="1" oninput="updateEQBand(1, this.value)" class="eq-vertical-slider">
-                <span class="text-xs font-bold text-slate-400">230 Hz</span>
-              </div>
-              <div class="flex flex-col items-center space-y-3">
-                <span id="eq-val-2" class="text-xs font-mono text-pink-400">+0dB</span>
-                <input type="range" min="-12" max="12" value="0" step="1" oninput="updateEQBand(2, this.value)" class="eq-vertical-slider">
-                <span class="text-xs font-bold text-slate-400">910 Hz</span>
-              </div>
-              <div class="flex flex-col items-center space-y-3">
-                <span id="eq-val-3" class="text-xs font-mono text-pink-400">+0dB</span>
-                <input type="range" min="-12" max="12" value="0" step="1" oninput="updateEQBand(3, this.value)" class="eq-vertical-slider">
-                <span class="text-xs font-bold text-slate-400">4 kHz</span>
-              </div>
-              <div class="flex flex-col items-center space-y-3">
-                <span id="eq-val-4" class="text-xs font-mono text-pink-400">+0dB</span>
-                <input type="range" min="-12" max="12" value="0" step="1" oninput="updateEQBand(4, this.value)" class="eq-vertical-slider">
-                <span class="text-xs font-bold text-slate-400">14 kHz</span>
-              </div>
-            </div>
-
-            <!-- Main Visualizer Canvas -->
-            <div class="space-y-2">
-              <label class="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Realtime Audio Spectrum</label>
-              <div class="w-full h-36 rounded-3xl overflow-hidden bg-slate-950 border border-white/5">
-                <canvas id="eq-visualizer-canvas" class="w-full h-full"></canvas>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- VIEW 6: RINGTONE CUTTER -->
-        <div id="view-ringtone" class="view-content hidden space-y-6">
-          <div class="dd-glass p-6 rounded-3xl space-y-6 border border-pink-500/20">
-            <h2 class="text-2xl font-black text-white">Ringtone Trimmer</h2>
-            <select id="ringtone-track-select" onchange="loadTrackForRingtone()" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3 text-xs text-slate-200 outline-none">
-              <option value="">-- Choose local track to cut --</option>
-            </select>
-
-            <div id="ringtone-editor" class="hidden space-y-6 bg-slate-950 p-6 rounded-2xl border border-white/5">
-              <div class="space-y-4">
-                <div class="flex justify-between text-xs text-slate-300">
-                  <span>Start: <strong id="trim-start-text" class="text-pink-400">0s</strong></span>
-                  <span>End: <strong id="trim-end-text" class="text-cyan-400">30s</strong></span>
-                </div>
-                <input id="trim-start-range" type="range" min="0" max="100" value="0" oninput="updateTrimRange()" class="w-full">
-                <input id="trim-end-range" type="range" min="0" max="100" value="30" oninput="updateTrimRange()" class="w-full">
-              </div>
-              <button onclick="exportRingtoneWAV()" class="px-6 py-3 rounded-2xl dd-btn-gradient text-xs font-bold text-white">Export WAV Ringtone</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- VIEW 7: PREFERENCES -->
-        <div id="view-settings" class="view-content hidden space-y-6">
-          <div class="dd-glass p-6 rounded-3xl space-y-6">
-            <h2 class="text-2xl font-black text-white">DD Music Settings</h2>
-            <div class="space-y-4">
-              <button onclick="clearIndexedDBData()" class="px-5 py-2.5 rounded-2xl bg-red-600/30 text-red-300 border border-red-500/30 text-xs font-bold hover:bg-red-600/50">Clear Local Database</button>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </main>
-  </div>
-
-  <!-- PERSISTENT DD MINI PLAYER (Bottom Fixed Bar) -->
-  <div id="mini-player" class="fixed bottom-0 left-0 right-0 h-20 dd-glass border-t border-white/10 z-40 px-4 sm:px-6 flex items-center justify-between shadow-2xl">
-    
-    <!-- Top Progress Line -->
-    <div class="absolute top-0 left-0 right-0 h-1 bg-slate-900 cursor-pointer group" onclick="seekAudioFromBar(event)">
-      <div id="mini-progress-fill" class="h-full dd-btn-gradient w-0 transition-all duration-75 relative">
-        <div class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition shadow-lg"></div>
-      </div>
-    </div>
-
-    <!-- Track Details -->
-    <div class="flex items-center space-x-3 w-1/3 min-w-0">
-      <img id="mini-cover" src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=150" class="w-12 h-12 rounded-2xl object-cover shrink-0 border border-white/10 shadow-md">
-      <div class="min-w-0 flex-1">
-        <h4 id="mini-title" class="text-xs font-extrabold text-slate-100 truncate">No Track Playing</h4>
-        <p id="mini-artist" class="text-[11px] text-slate-400 truncate">DD Music Engine</p>
-      </div>
-    </div>
-
-    <!-- Center Player Playback Controls -->
-    <div class="flex items-center space-x-3 sm:space-x-5">
-      <button onclick="playPrevTrack()" class="text-slate-300 hover:text-white transition">
-        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
-      </button>
-
-      <button onclick="togglePlayPause()" id="mini-play-btn" class="w-11 h-11 rounded-full dd-btn-gradient flex items-center justify-center text-white transition transform active:scale-95">
-        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-      </button>
-
-      <button onclick="playNextTrack()" class="text-slate-300 hover:text-white transition">
-        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-      </button>
-    </div>
-
-    <!-- Right Expand & Volume Controls -->
-    <div class="flex items-center justify-end space-x-3 w-1/3">
-      <span class="hidden md:inline-block text-[11px] font-mono text-slate-400">
-        <span id="mini-current-time">0:00</span> / <span id="mini-duration">0:00</span>
-      </span>
-
-      <div class="hidden sm:flex items-center space-x-2">
-        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M11 5L6 9H2v6h4l5 4V5z"/></svg>
-        <input type="range" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)" class="w-16">
-      </div>
-
-      <button onclick="openFullNowPlaying()" class="p-2 text-slate-300 hover:text-pink-400 transition" title="Full Screen Player">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
-      </button>
-    </div>
-  </div>
-
-  <!-- FULL SCREEN NOW PLAYING MODAL -->
-  <div id="full-player-modal" class="fixed inset-0 bg-[#050508]/95 backdrop-blur-2xl z-50 hidden flex-col justify-between p-6 sm:p-10">
-    <!-- Top Modal Header -->
-    <div class="flex items-center justify-between">
-      <button onclick="closeFullNowPlaying()" class="p-2 text-slate-400 hover:text-white rounded-full bg-slate-900">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-      </button>
-      <span class="text-xs font-black uppercase tracking-widest text-pink-400">DD Music Playing</span>
-      <button onclick="toggleFavoriteCurrentTrack()" class="p-2 text-slate-400 hover:text-pink-400">★</button>
-    </div>
-
-    <!-- Center Content -->
-    <div class="flex-1 overflow-y-auto my-6 flex flex-col md:flex-row items-center justify-center gap-10 max-w-5xl mx-auto w-full">
-      <!-- Big Artwork Disc -->
-      <div class="w-64 h-64 sm:w-80 sm:h-80 rounded-3xl overflow-hidden border border-white/10 shadow-2xl shrink-0">
-        <img id="full-cover" src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500" class="w-full h-full object-cover">
-      </div>
-
-      <!-- Synchronized LRC Lyrics Panel -->
-      <div class="w-full md:w-1/2 h-80 dd-glass rounded-3xl p-6 flex flex-col justify-between">
-        <div class="border-b border-white/5 pb-2 flex justify-between items-center">
-          <span class="text-xs font-bold text-slate-300">Synchronized Lyrics</span>
-          <button onclick="fetchLyricsForCurrentTrack()" class="text-[10px] text-pink-400 underline">Refresh</button>
-        </div>
-        <div id="lyrics-container" class="flex-1 overflow-y-auto my-3 space-y-3 text-center pr-2">
-          <p class="text-xs text-slate-500 py-12">Lyrics sync initialized...</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Scrub & Controls -->
-    <div class="max-w-3xl mx-auto w-full space-y-4">
-      <input type="range" id="full-seek-slider" min="0" max="100" value="0" oninput="seekAudioFromSlider(this.value)" class="w-full">
-      <div class="flex justify-between text-xs font-mono text-slate-400">
-        <span id="full-current-time">0:00</span>
-        <span id="full-duration">0:00</span>
-      </div>
-
-      <div class="flex items-center justify-center space-x-8 pt-2">
-        <button onclick="playPrevTrack()" class="p-2 text-slate-300 hover:text-white">
-          <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
-        </button>
-        <button onclick="togglePlayPause()" id="full-play-btn" class="w-16 h-16 rounded-full dd-btn-gradient flex items-center justify-center text-white shadow-xl">
-          <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-        </button>
-        <button onclick="playNextTrack()" class="p-2 text-slate-300 hover:text-white">
-          <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- SLEEP TIMER MODAL -->
-  <div id="sleep-timer-modal" class="fixed inset-0 bg-[#050508]/80 backdrop-blur-md z-50 hidden items-center justify-center p-4">
-    <div class="dd-glass p-6 rounded-3xl max-w-sm w-full space-y-4">
-      <h3 class="text-base font-bold text-white">Set Sleep Timer</h3>
-      <div class="grid grid-cols-2 gap-2">
-        <button onclick="setSleepTimer(15)" class="py-2.5 rounded-2xl dd-glass-card text-xs font-bold hover:bg-pink-600/30">15 Mins</button>
-        <button onclick="setSleepTimer(30)" class="py-2.5 rounded-2xl dd-glass-card text-xs font-bold hover:bg-pink-600/30">30 Mins</button>
-        <button onclick="setSleepTimer(60)" class="py-2.5 rounded-2xl dd-glass-card text-xs font-bold hover:bg-pink-600/30">60 Mins</button>
-        <button onclick="cancelSleepTimer()" class="py-2.5 rounded-2xl bg-red-600/20 text-red-300 text-xs font-bold">Cancel</button>
-      </div>
-      <button onclick="closeSleepTimerModal()" class="w-full py-2 text-xs text-slate-400">Close</button>
-    </div>
-  </div>
-
-  <!-- AUDIO ENGINE & DD LOGIC SCRIPT -->
-  <script>
-    const state = {
-      currentTrack: null,
-      isPlaying: false,
-      queue: [],
-      queueIndex: -1,
-      favorites: new Set(JSON.parse(localStorage.getItem('dd_favorites') || '[]')),
-      recentPlayed: JSON.parse(localStorage.getItem('dd_recent') || '[]'),
-      playlists: JSON.parse(localStorage.getItem('dd_playlists') || '[]'),
-      activeView: 'home',
-      audioCtx: null,
-      audioSourceNode: null,
-      eqFilters: [],
-      analyser: null,
-      lyricsData: [],
-      sleepTimerTimeout: null
-    };
-
-    const audio = new Audio();
-    // Do NOT enforce crossOrigin = "anonymous" because cross-origin iTunes CDN redirects 
-    // block playback if Web Audio demands CORS headers that the CDN doesn't serve.
-
-    let db;
-    function initIndexedDB() {
-      const req = indexedDB.open("DDMusicDB", 1);
-      req.onupgradeneeded = (e) => {
-        db = e.target.result;
-        if (!db.objectStoreNames.contains("tracks")) db.createObjectStore("tracks", { keyPath: "id" });
-      };
-      req.onsuccess = (e) => {
-        db = e.target.result;
-        loadLocalTracksFromDB();
-      };
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      initIndexedDB();
-      initWebAudioEngine();
-      fetchHomeFeaturedMusic();
-      renderHomeViews();
-
-      audio.addEventListener('timeupdate', handleAudioTimeUpdate);
-      audio.addEventListener('ended', handleAudioEnded);
-    });
-
-    function switchView(viewId) {
-      state.activeView = viewId;
-      document.querySelectorAll('.view-content').forEach(el => el.classList.add('hidden'));
-      const active = document.getElementById(`view-${viewId}`);
-      if (active) active.classList.remove('hidden');
-
-      document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('nav-item-active'));
-      const navBtn = document.getElementById(`nav-${viewId}`);
-      if (navBtn) navBtn.classList.add('nav-item-active');
-
-      if (viewId === 'library') renderLibrary();
-      if (viewId === 'playlists') renderPlaylistsGrid();
-      if (viewId === 'ringtone') populateRingtoneTrackSelect();
-    }
-
-    function toggleMobileNav() {
-      document.getElementById('sidebar-nav').classList.toggle('hidden');
-      document.getElementById('sidebar-nav').classList.toggle('fixed');
-      document.getElementById('sidebar-nav').classList.toggle('inset-0');
-    }
-
-    async function fetchHomeFeaturedMusic() {
-      try {
-        const res = await fetch('https://itunes.apple.com/search?term=top+charts&entity=song&limit=6');
-        const data = await res.json();
-        const grid = document.getElementById('home-featured-grid');
-        grid.innerHTML = '';
-        data.results.forEach(track => {
-          grid.appendChild(createTrackCardHTML(formatiTunesTrack(track)));
-        });
-      } catch (e) { console.error(e); }
-    }
-
-    function formatiTunesTrack(item) {
-      return {
-        id: 'itunes_' + item.trackId,
-        title: item.trackName || 'Unknown Title',
-        artist: item.artistName || 'Unknown Artist',
-        album: item.collectionName || 'Single',
-        cover: item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb', '400x400bb') : '',
-        src: item.previewUrl,
-        isOnline: true
-      };
-    }
-
-    function createTrackCardHTML(track) {
-      const card = document.createElement('div');
-      card.className = 'dd-glass-card rounded-2xl p-3 flex flex-col justify-between group relative cursor-pointer';
-      card.onclick = () => playSingleTrack(track);
-      card.innerHTML = `
-        <div class="relative w-full aspect-square rounded-xl overflow-hidden mb-2">
-          <img src="${track.cover}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
-          <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-            <div class="w-10 h-10 rounded-full dd-btn-gradient flex items-center justify-center text-white shadow-lg">
-              <svg class="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-            </div>
-          </div>
-        </div>
-        <div>
-          <h4 class="text-xs font-bold text-slate-100 truncate">${track.title}</h4>
-          <p class="text-[10px] text-slate-400 truncate">${track.artist}</p>
-        </div>
-      `;
-      return card;
-    }
-
-    async function handleOnlineSearch(e) {
-      if (e) e.preventDefault();
-      const val = document.getElementById('online-search-input').value;
-      handleOnlineSearchFromVal(val);
-    }
-
-    async function handleOnlineSearchFromVal(query) {
-      if (!query.trim()) return;
-      const grid = document.getElementById('search-results-grid');
-      const loader = document.getElementById('search-loading');
-      grid.innerHTML = '';
-      loader.classList.remove('hidden');
-
-      try {
-        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=24`);
-        const data = await res.json();
-        loader.classList.add('hidden');
-        if (!data.results.length) {
-          grid.innerHTML = `<div class="col-span-full text-center py-12 text-slate-500 text-xs">No tracks found.</div>`;
-          return;
-        }
-        data.results.forEach(track => grid.appendChild(createTrackCardHTML(formatiTunesTrack(track))));
-      } catch (err) {
-        loader.classList.add('hidden');
-      }
-    }
-
-    function quickSearch(term) {
-      document.getElementById('online-search-input').value = term;
-      handleOnlineSearch();
-    }
-
-    function handleLocalFilesSelect(e) {
-      const files = Array.from(e.target.files);
-      files.forEach(file => {
-        const track = {
-          id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-          title: file.name.replace(/\.[^/.]+$/, ""),
-          artist: "Local Track",
-          album: "Imports",
-          cover: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300",
-          fileBlob: file,
-          isOnline: false
-        };
-        saveTrackToDB(track);
-      });
-    }
-
-    function saveTrackToDB(track) {
-      if (!db) return;
-      const tx = db.transaction("tracks", "readwrite");
-      tx.objectStore("tracks").put(track);
-      tx.oncomplete = () => loadLocalTracksFromDB();
-    }
-
-    let localTracks = [];
-    function loadLocalTracksFromDB() {
-      if (!db) return;
-      const tx = db.transaction("tracks", "readonly");
-      const req = tx.objectStore("tracks").getAll();
-      req.onsuccess = () => {
-        localTracks = req.result || [];
-        document.getElementById('nav-lib-count').innerText = localTracks.length;
-        if (state.activeView === 'library') renderLibrary();
-      };
-    }
-
-    function playSingleTrack(track) {
-      state.currentTrack = track;
-
-      // Cleanly reset current playback
-      audio.pause();
-
-      if (track.isOnline) {
-        // Direct stream for iTunes preview MP3 links
-        audio.src = track.src;
-      } else if (track.fileBlob) {
-        audio.src = URL.createObjectURL(track.fileBlob);
-      } else if (track.src) {
-        audio.src = track.src;
-      }
-
-      // Ensure browser AudioContext is active
-      if (state.audioCtx && state.audioCtx.state === 'suspended') {
-        state.audioCtx.resume();
-      }
-
-      audio.load();
-      const playPromise = audio.play();
-
-      if (playPromise !== undefined) {
-        playPromise.then(() => {
-          state.isPlaying = true;
-          updatePlayerUI();
-          addToRecentHistory(track);
-          fetchLyricsForCurrentTrack();
-        }).catch(err => {
-          console.error("Audio playback error:", err);
-          state.isPlaying = false;
-          updatePlayerUI();
-          
-          // Retry directly without Web Audio node if browser restricted it
-          if (track.isOnline) {
-            audio.play().then(() => {
-              state.isPlaying = true;
-              updatePlayerUI();
-            }).catch(e => {
-              alert("Playback failed: The online preview link might be temporarily restricted or blocked by the browser. Try another track.");
-            });
-          }
-        });
-      }
-    }
-
-    function togglePlayPause() {
-      if (!state.currentTrack) return;
-
-      if (state.audioCtx && state.audioCtx.state === 'suspended') {
-        state.audioCtx.resume();
-      }
-
-      if (state.isPlaying) {
-        audio.pause();
-        state.isPlaying = false;
-        updatePlayerUI();
-      } else {
-        audio.play().then(() => {
-          state.isPlaying = true;
-          updatePlayerUI();
-        }).catch(e => console.error("Play error:", e));
-      }
-    }
-
-    function updatePlayerUI() {
-      const t = state.currentTrack;
-      if (!t) return;
-
-      document.getElementById('mini-title').innerText = t.title;
-      document.getElementById('mini-artist').innerText = t.artist;
-      document.getElementById('mini-cover').src = t.cover;
-
-      document.getElementById('full-cover').src = t.cover;
-
-      // DD Tonearm and Vinyl spin state
-      const vinyl = document.getElementById('hero-vinyl-disc');
-      const tonearm = document.getElementById('hero-tonearm');
-      if (state.isPlaying) {
-        vinyl.classList.remove('paused-animation');
-        tonearm.classList.add('tonearm-playing');
-      } else {
-        vinyl.classList.add('paused-animation');
-        tonearm.classList.remove('tonearm-playing');
-      }
-
-      const playSVG = '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
-      const pauseSVG = '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
-      document.getElementById('mini-play-btn').innerHTML = state.isPlaying ? pauseSVG : playSVG;
-      document.getElementById('full-play-btn').innerHTML = state.isPlaying ? pauseSVG : playSVG;
-    }
-
-    function handleAudioTimeUpdate() {
-      if (!audio.duration) return;
-      const pct = (audio.currentTime / audio.duration) * 100;
-      document.getElementById('mini-progress-fill').style.width = `${pct}%`;
-      document.getElementById('full-seek-slider').value = pct;
-
-      const c = formatTime(audio.currentTime);
-      const d = formatTime(audio.duration);
-      document.getElementById('mini-current-time').innerText = c;
-      document.getElementById('mini-duration').innerText = d;
-      document.getElementById('full-current-time').innerText = c;
-      document.getElementById('full-duration').innerText = d;
-    }
-
-    function handleAudioEnded() {
-      playNextTrack();
-    }
-
-    function playNextTrack() {
-      if (!state.queue.length) return;
-      state.queueIndex = (state.queueIndex + 1) % state.queue.length;
-      playSingleTrack(state.queue[state.queueIndex]);
-    }
-
-    function playPrevTrack() {
-      if (!state.queue.length) return;
-      state.queueIndex = (state.queueIndex - 1 + state.queue.length) % state.queue.length;
-      playSingleTrack(state.queue[state.queueIndex]);
-    }
-
-    function seekAudioFromBar(e) {
-      if (!audio.duration) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration;
-    }
-
-    function seekAudioFromSlider(val) {
-      if (!audio.duration) return;
-      audio.currentTime = (val / 100) * audio.duration;
-    }
-
-    function setVolume(v) { audio.volume = v; }
-
-    function renderLibrary(tab = 'all') {
-      const container = document.getElementById('library-track-list');
-      container.innerHTML = '';
-      let list = [...localTracks];
-
-      if (list.length === 0) {
-        container.innerHTML = `<div class="p-8 text-center text-slate-500 text-xs">No local imported songs.</div>`;
-        return;
-      }
-
-      list.forEach((t, idx) => {
-        const row = document.createElement('div');
-        row.className = 'p-3 hover:bg-white/5 grid grid-cols-12 gap-2 items-center text-xs transition cursor-pointer';
-        row.innerHTML = `
-          <div class="col-span-1 text-center font-mono text-slate-500">${idx + 1}</div>
-          <div class="col-span-6 sm:col-span-5 flex items-center space-x-3 min-w-0" onclick='playSingleTrack(${JSON.stringify(t).replace(/'/g, "&apos;")})'>
-            <img src="${t.cover}" class="w-8 h-8 rounded-lg object-cover">
-            <span class="font-bold text-slate-200 truncate">${t.title}</span>
-          </div>
-          <div class="hidden sm:block sm:col-span-3 text-slate-400 truncate">${t.artist}</div>
-          <div class="hidden md:block md:col-span-2 text-slate-500 truncate">${t.album}</div>
-          <div class="col-span-5 sm:col-span-3 md:col-span-1 text-right">
-            <button onclick="deleteTrackFromDB('${t.id}')" class="p-1 text-slate-500 hover:text-red-400">✕</button>
-          </div>
-        `;
-        container.appendChild(row);
-      });
-    }
-
-    function deleteTrackFromDB(id) {
-      if (!db) return;
-      const tx = db.transaction("tracks", "readwrite");
-      tx.objectStore("tracks").delete(id);
-      tx.oncomplete = () => loadLocalTracksFromDB();
-    }
-
-    /* PLAYLIST MANAGEMENT */
-    function renderPlaylistsGrid() {
-      const grid = document.getElementById('playlists-grid');
-      if (!grid) return;
-      grid.innerHTML = '';
-
-      if (!state.playlists.length) {
-        grid.innerHTML = `<div class="col-span-full text-center py-12 text-slate-500 text-xs">No playlists created yet. Click "+ New Playlist" above to create one!</div>`;
-        return;
-      }
-
-      state.playlists.forEach((pl, idx) => {
-        const card = document.createElement('div');
-        card.className = 'dd-glass-card rounded-3xl p-5 border border-white/5 relative group flex flex-col justify-between space-y-4';
-        card.innerHTML = `
-          <div class="flex items-center justify-between">
-            <div class="w-12 h-12 rounded-2xl dd-btn-gradient flex items-center justify-center text-white font-bold shadow-lg">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-2v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 .895-2 3-2 3 .895 3 2zm12 0c0 1.105-1.343 2-3 2s-3-.895-3-2 .895-2 3-2 3 .895 3 2zM9 10l12-2"/></svg>
-            </div>
-            <button onclick="deletePlaylist(${idx})" class="p-1.5 text-slate-500 hover:text-red-400 transition" title="Delete Playlist">✕</button>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-white truncate">${pl.name}</h3>
-            <p class="text-[11px] text-slate-400 font-mono">${pl.tracks ? pl.tracks.length : 0} tracks</p>
-          </div>
-          <button onclick="playPlaylist(${idx})" class="w-full py-2.5 rounded-xl bg-white/10 hover:bg-pink-600/30 text-xs font-bold text-slate-200 hover:text-white transition">
-            Play Playlist
-          </button>
-        `;
-        grid.appendChild(card);
-      });
-    }
-
-    function promptCreatePlaylist() {
-      const name = prompt("Enter playlist name:");
-      if (name && name.trim()) {
-        state.playlists.push({ name: name.trim(), tracks: [] });
-        localStorage.setItem('dd_playlists', JSON.stringify(state.playlists));
-        renderPlaylistsGrid();
-      }
-    }
-
-    function deletePlaylist(idx) {
-      if (confirm("Delete this playlist?")) {
-        state.playlists.splice(idx, 1);
-        localStorage.setItem('dd_playlists', JSON.stringify(state.playlists));
-        renderPlaylistsGrid();
-      }
-    }
-
-    function playPlaylist(idx) {
-      const pl = state.playlists[idx];
-      if (pl && pl.tracks && pl.tracks.length) {
-        state.queue = [...pl.tracks];
-        state.queueIndex = 0;
-        playSingleTrack(state.queue[0]);
-      } else {
-        alert("This playlist has no tracks to play.");
-      }
-    }
-
-    function renderHomeViews() {
-      const recentList = document.getElementById('home-recent-list');
-      recentList.innerHTML = '';
-      if (!state.recentPlayed.length) {
-        recentList.innerHTML = `<div class="text-center py-8 text-slate-500 text-xs">No listening history yet.</div>`;
-      } else {
-        state.recentPlayed.slice(0, 5).forEach(t => {
-          const row = document.createElement('div');
-          row.className = 'flex items-center justify-between p-2 rounded-2xl dd-glass-card cursor-pointer';
-          row.onclick = () => playSingleTrack(t);
-          row.innerHTML = `
-            <div class="flex items-center space-x-3 min-w-0">
-              <img src="${t.cover}" class="w-9 h-9 rounded-xl object-cover">
-              <div class="min-w-0">
-                <h4 class="text-xs font-bold text-white truncate">${t.title}</h4>
-                <p class="text-[10px] text-slate-400 truncate">${t.artist}</p>
-              </div>
-            </div>
-          `;
-          recentList.appendChild(row);
-        });
-      }
-    }
-
-    function addToRecentHistory(track) {
-      state.recentPlayed = state.recentPlayed.filter(t => t.id !== track.id);
-      state.recentPlayed.unshift(track);
-      localStorage.setItem('dd_recent', JSON.stringify(state.recentPlayed));
-      renderHomeViews();
-    }
-
-    /* WEB AUDIO EQ & VISUALIZER */
-    function initWebAudioEngine() {
-      try {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        state.audioCtx = new AudioContext();
-        
-        // Connect HTML Audio Element to Web Audio Graph using try/catch safeguard
-        try {
-          state.audioSourceNode = state.audioCtx.createMediaElementSource(audio);
-        } catch (err) {
-          console.warn("MediaElementSource already created or restricted:", err);
-        }
-
-        state.analyser = state.audioCtx.createAnalyser();
-        state.analyser.fftSize = 64;
-
-        const freqs = [60, 230, 910, 4000, 14000];
-        state.eqFilters = freqs.map(freq => {
-          const filter = state.audioCtx.createBiquadFilter();
-          filter.type = 'peaking';
-          filter.frequency.value = freq;
-          filter.Q.value = 1;
-          filter.gain.value = 0;
-          return filter;
-        });
-
-        if (state.audioSourceNode) {
-          let prev = state.audioSourceNode;
-          state.eqFilters.forEach(f => { prev.connect(f); prev = f; });
-          prev.connect(state.analyser);
-          state.analyser.connect(state.audioCtx.destination);
-        }
-
-        drawVisualizers();
-      } catch (e) { 
-        console.warn("Web Audio Engine fallback active:", e); 
-      }
-    }
-
-    function applyEQPreset(p) {
-      const presets = { normal: [0,0,0,0,0], rock: [4,2,-1,3,5], pop: [-1,2,4,2,-2], jazz: [3,1,2,2,-1], bass: [8,5,1,0,-2] };
-      (presets[p] || presets.normal).forEach((v, i) => {
-        const slider = document.querySelectorAll('.eq-vertical-slider')[i];
-        if (slider) { slider.value = v; updateEQBand(i, v); }
-      });
-    }
-
-    function drawVisualizers() {
-      const canvas = document.getElementById('eq-visualizer-canvas');
-      const headerCanvas = document.getElementById('header-spectrum-canvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      const headerCtx = headerCanvas ? headerCanvas.getContext('2d') : null;
-
-      function render() {
-        requestAnimationFrame(render);
-        if (!state.analyser) return;
-
-        const len = state.analyser.frequencyBinCount;
-        const data = new Uint8Array(len);
-        state.analyser.getByteFrequencyData(data);
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const barW = (canvas.width / len) * 2.5;
-        let x = 0;
-        for (let i = 0; i < len; i++) {
-          const barH = (data[i] / 255) * canvas.height;
-          ctx.fillStyle = '#FF0055';
-          ctx.fillRect(x, canvas.height - barH, barW - 1, barH);
-          x += barW;
-        }
-
-        if (headerCtx) {
-          headerCtx.clearRect(0, 0, headerCanvas.width, headerCanvas.height);
-          let hX = 0;
-          const hBarW = (headerCanvas.width / len) * 2;
-          for (let i = 0; i < len; i++) {
-            const barH = (data[i] / 255) * headerCanvas.height;
-            headerCtx.fillStyle = '#A855F7';
-            headerCtx.fillRect(hX, headerCanvas.height - barH, hBarW - 1, barH);
-            hX += hBarW;
-          }
-        }
-      }
-      render();
-    }
-
-    /* LYRICS FETCH & PARSE */
-    async function fetchLyricsForCurrentTrack() {
-      const track = state.currentTrack;
-      const container = document.getElementById('lyrics-container');
-      if (!track) return;
-      container.innerHTML = `<p class="text-xs text-slate-400 py-8 animate-pulse">Searching DD Lyrics...</p>`;
-
-      try {
-        const res = await fetch(`https://lrclib.net/api/get?artist_name=${encodeURIComponent(track.artist)}&track_name=${encodeURIComponent(track.title)}`);
-        const data = await res.json();
-        if (data && data.plainLyrics) {
-          container.innerHTML = `<p class="text-xs text-slate-300 whitespace-pre-line leading-relaxed">${data.plainLyrics}</p>`;
-        } else {
-          container.innerHTML = `<p class="text-xs text-slate-500 py-8">No lyrics found for track.</p>`;
-        }
-      } catch (e) { container.innerHTML = `<p class="text-xs text-slate-500 py-8">Lyrics unavailable.</p>`; }
-    }
-
-    /* RINGTONE EXPORT */
-    function populateRingtoneTrackSelect() {
-      const select = document.getElementById('ringtone-track-select');
-      select.innerHTML = '<option value="">-- Choose local track to cut --</option>';
-      localTracks.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.id;
-        opt.innerText = t.title;
-        select.appendChild(opt);
-      });
-    }
-
-    function loadTrackForRingtone() {
-      const id = document.getElementById('ringtone-track-select').value;
-      document.getElementById('ringtone-editor').classList.toggle('hidden', !id);
-    }
-
-    function updateTrimRange() {
-      const s = document.getElementById('trim-start-range').value;
-      const e = document.getElementById('trim-end-range').value;
-      document.getElementById('trim-start-text').innerText = s + 's';
-      document.getElementById('trim-end-text').innerText = e + 's';
-    }
-
-    async function exportRingtoneWAV() {
-      const id = document.getElementById('ringtone-track-select').value;
-      const track = localTracks.find(t => t.id === id);
-      if (!track || !track.fileBlob) return;
-
-      const buf = await track.fileBlob.arrayBuffer();
-      const actx = new (window.AudioContext || window.webkitAudioContext)();
-      const decoded = await actx.decodeAudioData(buf);
-
-      const s = parseFloat(document.getElementById('trim-start-range').value);
-      const e = parseFloat(document.getElementById('trim-end-range').value);
-      const dur = e - s;
-
-      const octx = new OfflineAudioContext(decoded.numberOfChannels, dur * decoded.sampleRate, decoded.sampleRate);
-      const src = octx.createBufferSource();
-      src.buffer = decoded;
-      src.connect(octx.destination);
-      src.start(0, s, dur);
-
-      const rendered = await octx.startRendering();
-      const wav = audioBufferToWav(rendered);
-
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(wav);
-      a.download = `${track.title}_ringtone.wav`;
-      a.click();
-    }
-
-    function audioBufferToWav(buffer) {
-      let numOfChan = buffer.numberOfChannels,
-          length = buffer.length * numOfChan * 2 + 44,
-          out = new DataView(new ArrayBuffer(length)),
-          channels = [], sampleRate = buffer.sampleRate,
-          offset = 0, pos = 0;
-
-      function setUint16(data) { out.setUint16(pos, data, true); pos += 2; }
-      function setUint32(data) { out.setUint32(pos, data, true); pos += 4; }
-
-      setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157);
-      setUint32(0x20746d66); setUint32(16); setUint16(1); setUint16(numOfChan);
-      setUint32(sampleRate); setUint32(sampleRate * 2 * numOfChan);
-      setUint16(numOfChan * 2); setUint16(16); setUint32(0x61746164); setUint32(length - pos - 4);
-
-      for (let i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
-
-      while (offset < buffer.length) {
-        for (let i = 0; i < numOfChan; i++) {
-          let sample = Math.max(-1, Math.min(1, channels[i][offset]));
-          sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
-          out.setInt16(pos, sample, true); pos += 2;
-        }
-        offset++;
-      }
-      return new Blob([out], { type: "audio/wav" });
-    }
-
-    function openSleepTimerModal() { document.getElementById('sleep-timer-modal').classList.remove('hidden'); document.getElementById('sleep-timer-modal').classList.add('flex'); }
-    function closeSleepTimerModal() { document.getElementById('sleep-timer-modal').classList.add('hidden'); }
-    function setSleepTimer(m) {
-      if (state.sleepTimerTimeout) clearTimeout(state.sleepTimerTimeout);
-      state.sleepTimerTimeout = setTimeout(() => { if (state.isPlaying) togglePlayPause(); }, m * 60 * 1000);
-      document.getElementById('sleep-timer-label').innerText = `${m}m Timer`;
-      closeSleepTimerModal();
-    }
-    function cancelSleepTimer() {
-      if (state.sleepTimerTimeout) clearTimeout(state.sleepTimerTimeout);
-      document.getElementById('sleep-timer-label').innerText = `Sleep Timer`;
-      closeSleepTimerModal();
-    }
-
-    function openFullNowPlaying() { document.getElementById('full-player-modal').classList.remove('hidden'); document.getElementById('full-player-modal').classList.add('flex'); }
-    function closeFullNowPlaying() { document.getElementById('full-player-modal').classList.add('hidden'); }
-
-    function formatTime(secs) {
-      if (isNaN(secs)) return '0:00';
-      const m = Math.floor(secs / 60);
-      const s = Math.floor(secs % 60);
-      return `${m}:${s < 10 ? '0' : ''}${s}`;
-    }
-
-    /* FAVORITES MANAGEMENT */
-    function toggleFavoriteCurrentTrack() {
-      const track = state.currentTrack;
-      if (!track) return;
-
-      if (state.favorites.has(track.id)) {
-        state.favorites.delete(track.id);
-      } else {
-        state.favorites.add(track.id);
-      }
-
-      localStorage.setItem('dd_favorites', JSON.stringify(Array.from(state.favorites)));
-      updateFavoriteButtonUI();
-      renderHomeViews();
-    }
-
-    function updateFavoriteButtonUI() {
-      const track = state.currentTrack;
-      const favBtn = document.querySelector('#full-player-modal button[onclick="toggleFavoriteCurrentTrack()"]');
-      if (!favBtn || !track) return;
-
-      if (state.favorites.has(track.id)) {
-        favBtn.classList.add('text-pink-500');
-        favBtn.classList.remove('text-slate-400');
-      } else {
-        favBtn.classList.remove('text-pink-500');
-        favBtn.classList.add('text-slate-400');
-      }
-    }
-
-    function clearIndexedDBData() {
-      if (confirm("Clear local DB storage?")) {
-        indexedDB.deleteDatabase("DDMusicDB");
-        localStorage.clear();
-        location.reload();
-      }
-    }
-  </script>
 </body>
 </html>
